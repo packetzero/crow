@@ -14,7 +14,8 @@ enum FieldType {
   TYPE_BOOL           = 6,
   TYPE_STRING         = 7,
   TYPE_BYTES          = 8,
-  MAX_FIELD_TYPE      = 9,
+  TYPE_ROWSEP         = 9,
+  MAX_FIELD_TYPE      = 10,
 };
 
 typedef std::vector<uint8_t> Bytes;
@@ -32,8 +33,9 @@ namespace simplepb {
     virtual void put(uint32_t fieldIndex, const char* str) = 0;
     virtual void put(uint32_t fieldIndex, const std::vector<uint8_t>& value) = 0;
     virtual void put(uint32_t fieldIndex, bool value) = 0;
+    virtual void putRowSep() = 0;
 
-    virtual const Bytes * buffer() = 0;
+    virtual std::string str()=0;
     virtual void clear() = 0;
 
     virtual ~Encoder() {}
@@ -48,6 +50,7 @@ namespace simplepb {
     virtual void onField(uint32_t fieldIndex, double value) {}
     virtual void onField(uint32_t fieldIndex, const std::string &value) {}
     virtual void onField(uint32_t fieldIndex, const std::vector<uint8_t> value) {}
+    virtual void onRowSep() {}
   };
 
   class Decoder {

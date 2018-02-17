@@ -3,6 +3,7 @@
 
 void BytesToHexString(const unsigned char *bytes, size_t len, std::string &dest);
 void BytesToHexString(const Bytes &vec, std::string &dest);
+void BytesToHexString(const std::string &bytes, std::string &dest);
 
 class EncTest : public ::testing::Test {
  protected:
@@ -13,10 +14,10 @@ class EncTest : public ::testing::Test {
 
 TEST_F(EncTest, u32) {
   auto &enc = *simplepb::EncoderNew();
-  const std::vector<uint8_t> & result = *enc.buffer();
 
   uint32_t val = 7;
   enc.put(0, val);
+  std::string result = enc.str();
   ASSERT_EQ(3, result.size());
   ASSERT_EQ(0, result[0]);
   ASSERT_EQ(2, result[1]);
@@ -26,6 +27,7 @@ TEST_F(EncTest, u32) {
 
   val = 0x8000FFFFU;
   enc.put(1, val);
+  result=enc.str();
   ASSERT_EQ(7, result.size());
   ASSERT_EQ(1, result[0]);
   ASSERT_EQ(2, result[1]);
@@ -34,10 +36,10 @@ TEST_F(EncTest, u32) {
 
 TEST_F(EncTest, i32) {
   auto &enc = *simplepb::EncoderNew();
-  const std::vector<uint8_t> & result = *enc.buffer();
 
   int32_t val = -2;
   enc.put(0, val);
+  std::string result = enc.str();
   ASSERT_EQ(3, result.size());
   ASSERT_EQ(0, result[0]);
   ASSERT_EQ(1, result[1]);
@@ -52,10 +54,11 @@ TEST_F(EncTest, i32) {
 
 TEST_F(EncTest, dub) {
   auto &enc = *simplepb::EncoderNew();
-  const std::vector<uint8_t> & result = *enc.buffer();
 
   double val = 123.456;
   enc.put(9, val);
+  std::string result = enc.str();
+
   ASSERT_EQ(10, result.size());
   ASSERT_EQ(9, result[0]);
   ASSERT_EQ(TYPE_DOUBLE, result[1]);
@@ -70,19 +73,23 @@ TEST_F(EncTest, dub) {
 TEST_F(EncTest, repeatedStrings) {
   auto pEnc = simplepb::EncoderNew();
   auto &enc = *pEnc;
-  const std::vector<uint8_t> & result = *enc.buffer();
 
   uint32_t fieldIndex = 3;
   enc.put(fieldIndex, "one");
-  enc.put(fieldIndex, "two");
+  enc.put(fieldIndex, std::string("two"));
   enc.put(fieldIndex, "three");
   enc.put(fieldIndex, "four");
   enc.put(fieldIndex, "five");
+  std::string result = enc.str();
+
+  std::string exp="\x03\a\x03one\x03\a\x03two\x03\a\x05three\x03\a\04four\x03\a\04five";
+  ASSERT_EQ(exp.length(), result.length());
+  ASSERT_TRUE(memcmp(exp.c_str(), result.c_str(), exp.length())==0);
 
   std::string s;
   BytesToHexString(result, s);
   printf("%s\n", s.c_str());
-
+  
   delete pEnc;
 }
 
@@ -102,7 +109,7 @@ TEST_F(EncTest, simple) {
   pEnc.put(fieldIndex++, a.u64val);  // 2 + 5
   pEnc.put(fieldIndex++, a.strval);  // 2 + 1 + 5
   pEnc.put(fieldIndex++, a.dval);   // 2 + 8
-  const Bytes & result = *pEnc.buffer();
+  std::string result = pEnc.str();
 
   std::string s;
   BytesToHexString(result, s);
@@ -140,4 +147,9 @@ void BytesToHexString(const unsigned char *bytes, size_t len, std::string &dest)
 void BytesToHexString(const Bytes &bytes, std::string &dest)
 {
   BytesToHexString(bytes.data(), bytes.size(), dest);
+}
+
+void BytesToHexString(const std::string &bytes, std::string &dest)
+{
+  BytesToHexString((const unsigned char *)bytes.data(), bytes.size(), dest);
 }

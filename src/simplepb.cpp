@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include "../include/simplepb.hpp"
 
 #define NONE_LEFT() (_ptr >= _end)
@@ -79,81 +81,65 @@ namespace simplepb {
       size_t srcLen = strlen(str);
       writeTag(fieldIndex, TYPE_STRING);
       writeVarInt(srcLen);
-      auto len=_buf.size();
-      _buf.resize(len + srcLen);
-      auto *p = _buf.data() + len;
-      memcpy(p, str, srcLen);
-
+      _buf.sputn(str, srcLen);
     }
 
     void put(uint32_t fieldIndex, const std::string value) override {
       writeTag(fieldIndex, TYPE_STRING);
       writeVarInt(value.length());
-      auto len=_buf.size();
-      _buf.resize(len + value.length());
-      auto *p = _buf.data() + len;
-      memcpy(p, value.c_str(), value.length());
+      _buf.sputn(value.c_str(), value.length());
     }
 
     void put(uint32_t fieldIndex, const std::vector<uint8_t>& value) override {
       writeTag(fieldIndex, TYPE_BYTES);
       writeVarInt(value.size());
-      auto len=_buf.size();
-      _buf.resize(len + value.size());
-      auto *p = _buf.data() + len;
-      memcpy(p, value.data(), value.size());
+      _buf.sputn((const char *)value.data(), value.size());
     }
 
-
-    const std::vector<uint8_t> * buffer() override {
-      return &_buf;
+    void putRowSep() override {
+      writeTag(0, TYPE_ROWSEP);
     }
-    void clear() override { _buf.resize(0); }
+
+    std::string str() override {
+      return _buf.str();
+    }
+
+    void clear() override { _buf.str(""); }
 
   private:
 
     void writeFixed64(uint64_t value) {
-      auto len=_buf.size();
-      _buf.resize(len + sizeof(value));
-      auto *p = _buf.data() + len;
-      memcpy(p, &value, sizeof(value));
+      union { uint64_t ival; uint8_t bytes[8];};
+      ival = value;
+      _buf.sputn((const char *)&bytes[0], sizeof(bytes));
     }
 
     /*
      * Tags are always 2 bytes (fieldIndex, FieldType)
      */
     void writeTag(uint32_t fieldIndex, FieldType ft) {
-      auto len=_buf.size();
-      _buf.resize(len + 2);
-      auto *p = _buf.data() + len;
-      *p++ = fieldIndex & 0x07F;
-      *p++ = ft & 0x7F;
+      _buf.sputc((uint8_t)(fieldIndex & 0x7F));
+      _buf.sputc((uint8_t)(ft & 0x7F));
     }
 
     size_t writeVarInt(uint64_t value) {
-      size_t buflen = _buf.size();
-      size_t newlen = buflen;
-      _buf.resize(buflen + 12);     // at most 10 bytes for an encoding?
-      uint8_t* p = _buf.data() + buflen;
-
+      size_t i=0;
       while (true) {
+        i++;
         uint8_t b = (uint8_t)(value & 0x07F);
-        newlen++;
         value = value >> 7;
         if (0L == value) {
-          *p = b;
+          _buf.sputc(b);
           break;
         }
-        *p++ = (b | 0x80u);
+        _buf.sputc(b | 0x80u);
       }
 
-      _buf.resize(newlen);
-      return (newlen - buflen);
+      return i;
     }
 
 
-    std::vector<uint8_t> _buf;
-
+    std::stringbuf _buf;
   };
 
   Encoder* EncoderNew() { return new EncoderImpl(); }
@@ -212,6 +198,11 @@ namespace simplepb {
           case TYPE_BOOL: {
             uint64_t tmp = readVarInt();
             listener.onField(fieldIndex, (bool)tmp);
+          }
+          break;
+
+          case TYPE_ROWSEP: {
+            listener.onRowSep();
           }
           break;
 
