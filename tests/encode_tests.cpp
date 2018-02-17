@@ -17,8 +17,8 @@ TEST_F(EncTest, u32) {
 
   uint32_t val = 7;
   enc.put(0, val);
-  std::string result = enc.str();
-  ASSERT_EQ(3, result.size());
+  const uint8_t* result = enc.data();
+  ASSERT_EQ(3, enc.size());
   ASSERT_EQ(0, result[0]);
   ASSERT_EQ(2, result[1]);
   ASSERT_EQ(7, result[2]);
@@ -27,8 +27,8 @@ TEST_F(EncTest, u32) {
 
   val = 0x8000FFFFU;
   enc.put(1, val);
-  result=enc.str();
-  ASSERT_EQ(7, result.size());
+  result=enc.data();
+  ASSERT_EQ(7, enc.size());
   ASSERT_EQ(1, result[0]);
   ASSERT_EQ(2, result[1]);
 
@@ -39,14 +39,14 @@ TEST_F(EncTest, i32) {
 
   int32_t val = -2;
   enc.put(0, val);
-  std::string result = enc.str();
-  ASSERT_EQ(3, result.size());
+  auto result = enc.data();
+  ASSERT_EQ(3, enc.size());
   ASSERT_EQ(0, result[0]);
   ASSERT_EQ(1, result[1]);
   ASSERT_EQ(3, result[2]);  // ZigZagEncode32(-2) == 3u
 
   std::string s;
-  BytesToHexString(result, s);
+  BytesToHexString(result, enc.size(), s);
   printf("%s\n", s.c_str());
 
   enc.clear();
@@ -57,14 +57,14 @@ TEST_F(EncTest, dub) {
 
   double val = 123.456;
   enc.put(9, val);
-  std::string result = enc.str();
+  auto result = enc.data();
 
-  ASSERT_EQ(10, result.size());
+  ASSERT_EQ(10, enc.size());
   ASSERT_EQ(9, result[0]);
   ASSERT_EQ(TYPE_DOUBLE, result[1]);
 
   std::string s;
-  BytesToHexString(result, s);
+  BytesToHexString(result, enc.size(), s);
   printf("%s\n", s.c_str());
 
   enc.clear();
@@ -80,14 +80,14 @@ TEST_F(EncTest, repeatedStrings) {
   enc.put(fieldIndex, "three");
   enc.put(fieldIndex, "four");
   enc.put(fieldIndex, "five");
-  std::string result = enc.str();
+  auto result = enc.data();
 
   std::string exp="\x03\a\x03one\x03\a\x03two\x03\a\x05three\x03\a\04four\x03\a\04five";
-  ASSERT_EQ(exp.length(), result.length());
-  ASSERT_TRUE(memcmp(exp.c_str(), result.c_str(), exp.length())==0);
+  ASSERT_EQ(exp.length(), enc.size());
+  ASSERT_TRUE(memcmp(exp.c_str(), result, exp.length())==0);
 
   std::string s;
-  BytesToHexString(result, s);
+  BytesToHexString(result, enc.size(), s);
   printf("%s\n", s.c_str());
   
   delete pEnc;
@@ -109,13 +109,13 @@ TEST_F(EncTest, simple) {
   pEnc.put(fieldIndex++, a.u64val);  // 2 + 5
   pEnc.put(fieldIndex++, a.strval);  // 2 + 1 + 5
   pEnc.put(fieldIndex++, a.dval);   // 2 + 8
-  std::string result = pEnc.str();
+  auto result = pEnc.data();
 
   std::string s;
-  BytesToHexString(result, s);
+  BytesToHexString(result, pEnc.size(), s);
   printf("%s\n", s.c_str());
 
-  ASSERT_EQ(26, result.size());
+  ASSERT_EQ(26, pEnc.size());
 
   delete &pEnc;
 }

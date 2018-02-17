@@ -1,6 +1,5 @@
-#include <sstream>
-
 #include "../include/simplepb.hpp"
+#include "stack.hpp"
 
 #define NONE_LEFT() (_ptr >= _end)
 #define BYTES_REMAIN() (_ptr < _end)
@@ -46,8 +45,8 @@ namespace simplepb {
 
   class EncoderImpl : public Encoder {
   public:
-    EncoderImpl() : Encoder(), _buf() {}
-    ~EncoderImpl() {}
+    EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity) {}
+    ~EncoderImpl() { }
 
     void put(uint32_t fieldIndex, int32_t value) override {
       writeTag(fieldIndex, TYPE_INT32);
@@ -81,45 +80,52 @@ namespace simplepb {
       size_t srcLen = strlen(str);
       writeTag(fieldIndex, TYPE_STRING);
       writeVarInt(srcLen);
-      _buf.sputn(str, srcLen);
+      memcpy(_stack.Push(srcLen), str, srcLen);
     }
 
     void put(uint32_t fieldIndex, const std::string value) override {
       writeTag(fieldIndex, TYPE_STRING);
       writeVarInt(value.length());
-      _buf.sputn(value.c_str(), value.length());
+      memcpy(_stack.Push(value.length()), value.c_str(), value.length());
+    }
+
+    void put(uint32_t fieldIndex, const uint8_t* bytes, size_t len) override {
+      writeTag(fieldIndex, TYPE_BYTES);
+      writeVarInt(len);
+      memcpy(_stack.Push(len), bytes, len);
     }
 
     void put(uint32_t fieldIndex, const std::vector<uint8_t>& value) override {
       writeTag(fieldIndex, TYPE_BYTES);
       writeVarInt(value.size());
-      _buf.sputn((const char *)value.data(), value.size());
+      memcpy(_stack.Push(value.size()), value.data(), value.size());
     }
 
     void putRowSep() override {
       writeTag(0, TYPE_ROWSEP);
     }
 
-    std::string str() override {
-      return _buf.str();
-    }
+    const uint8_t* data() const override { return _stack.Bottom(); }
 
-    void clear() override { _buf.str(""); }
+    size_t size() const override { return _stack.GetSize(); }
+
+    void clear() override { _stack.Clear(); }
 
   private:
 
     void writeFixed64(uint64_t value) {
       union { uint64_t ival; uint8_t bytes[8];};
       ival = value;
-      _buf.sputn((const char *)&bytes[0], sizeof(bytes));
+      memcpy(_stack.Push(sizeof(value)), bytes, sizeof(bytes));
     }
 
     /*
      * Tags are always 2 bytes (fieldIndex, FieldType)
      */
     void writeTag(uint32_t fieldIndex, FieldType ft) {
-      _buf.sputc((uint8_t)(fieldIndex & 0x7F));
-      _buf.sputc((uint8_t)(ft & 0x7F));
+      uint8_t* ptr = _stack.Push(2);
+      ptr[0] = (uint8_t)(fieldIndex & 0x7F);
+      ptr[1] = (uint8_t)(ft & 0x7F);
     }
 
     size_t writeVarInt(uint64_t value) {
@@ -129,20 +135,21 @@ namespace simplepb {
         uint8_t b = (uint8_t)(value & 0x07F);
         value = value >> 7;
         if (0L == value) {
-          _buf.sputc(b);
+          uint8_t* ptr = _stack.Push(1);
+          *ptr = b;
           break;
         }
-        _buf.sputc(b | 0x80u);
+        uint8_t* p = _stack.Push(1);
+        *p = (b | 0x80u);
       }
 
       return i;
     }
 
-
-    std::stringbuf _buf;
+    Stack _stack;
   };
 
-  Encoder* EncoderNew() { return new EncoderImpl(); }
+  Encoder* EncoderNew(size_t initialCapacity) { return new EncoderImpl(initialCapacity); }
 
   class DecoderImpl : public Decoder {
   public:

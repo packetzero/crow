@@ -32,10 +32,12 @@ namespace simplepb {
     virtual void put(uint32_t fieldIndex, const std::string value) = 0;
     virtual void put(uint32_t fieldIndex, const char* str) = 0;
     virtual void put(uint32_t fieldIndex, const std::vector<uint8_t>& value) = 0;
+    virtual void put(uint32_t fieldIndex, const uint8_t* bytes, size_t len) = 0;
     virtual void put(uint32_t fieldIndex, bool value) = 0;
     virtual void putRowSep() = 0;
 
-    virtual std::string str()=0;
+    virtual const uint8_t* data() const = 0;
+    virtual size_t size() const = 0;
     virtual void clear() = 0;
 
     virtual ~Encoder() {}
@@ -59,7 +61,7 @@ namespace simplepb {
     virtual ~Decoder() {}
   };
 
-  Encoder* EncoderNew();
+  Encoder* EncoderNew(size_t initialCapacity = 4096);
   Decoder* DecoderNew();
 
 
