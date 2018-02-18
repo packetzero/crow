@@ -45,8 +45,18 @@ namespace simplepb {
 
   class EncoderImpl : public Encoder {
   public:
-    EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity) {}
+    EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity), _hasHeaders(false) {}
     ~EncoderImpl() { }
+
+    void putHeader(uint32_t fieldIndex, FieldType fieldType, const std::string name) override {
+      if (!_hasHeaders) {
+        writeTag(0, TYPE_ROWSEP);  // precede with ROWSEP if first row is header
+      }
+      _hasHeaders = true;
+      writeTag(fieldIndex, fieldType);
+      writeVarInt(name.length());
+      memcpy(_stack.Push(name.length()), name.c_str(), name.length());
+    }
 
     void put(uint32_t fieldIndex, int32_t value) override {
       writeTag(fieldIndex, TYPE_INT32);
@@ -109,7 +119,7 @@ namespace simplepb {
 
     size_t size() const override { return _stack.GetSize(); }
 
-    void clear() override { _stack.Clear(); }
+    void clear() override { _stack.Clear(); _hasHeaders = false; }
 
   private:
 
@@ -147,6 +157,7 @@ namespace simplepb {
     }
 
     Stack _stack;
+    bool _hasHeaders;
   };
 
   Encoder* EncoderNew(size_t initialCapacity) { return new EncoderImpl(initialCapacity); }

@@ -24,6 +24,12 @@ namespace simplepb {
 
   class Encoder {
   public:
+    virtual void putHeader(uint32_t fieldIndex, FieldType fieldType, const std::string name) = 0;
+
+    inline void putHeader(uint32_t fieldIndex, int32_t value, const std::string &name) {
+      putHeader(fieldIndex, TYPE_INT32, name);
+    }
+
     virtual void put(uint32_t fieldIndex, int32_t value) = 0;
     virtual void put(uint32_t fieldIndex, uint32_t value) = 0;
     virtual void put(uint32_t fieldIndex, int64_t value) = 0;
@@ -34,6 +40,7 @@ namespace simplepb {
     virtual void put(uint32_t fieldIndex, const std::vector<uint8_t>& value) = 0;
     virtual void put(uint32_t fieldIndex, const uint8_t* bytes, size_t len) = 0;
     virtual void put(uint32_t fieldIndex, bool value) = 0;
+
     virtual void putRowSep() = 0;
 
     virtual const uint8_t* data() const = 0;
