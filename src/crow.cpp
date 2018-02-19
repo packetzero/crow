@@ -1,46 +1,10 @@
 #include "../include/crow.hpp"
 #include "stack.hpp"
+#include "protobuf_wire_format.h"
 
 #define NONE_LEFT() (_ptr >= _end)
 #define BYTES_REMAIN() (_ptr < _end)
 #define MAX_NAME_LEN 64
-
-//
-// taken from protobuf wire_format_lite.h
-inline uint32_t ZigZagEncode32(int32_t n) {
-  // Note:  the right-shift must be arithmetic
-  // Note:  left shift must be unsigned because of overflow
-  return (static_cast<uint32_t>(n) << 1) ^ static_cast<uint32_t>(n >> 31);
-}
-
-inline int32_t ZigZagDecode32(uint32_t n) {
-  // Note:  Using unsigned types prevent undefined behavior
-  return static_cast<int32_t>((n >> 1) ^ (~(n & 1) + 1));
-}
-
-inline uint64_t ZigZagEncode64(int64_t n) {
-  // Note:  the right-shift must be arithmetic
-  // Note:  left shift must be unsigned because of overflow
-  return (static_cast<uint64_t>(n) << 1) ^ static_cast<uint64_t>(n >> 63);
-}
-
-inline int64_t ZigZagDecode64(uint64_t n) {
-  // Note:  Using unsigned types prevent undefined behavior
-  return static_cast<int64_t>((n >> 1) ^ (~(n & 1) + 1));
-}
-
-inline uint64_t EncodeDouble(double value) {
-  union {double f; uint64_t i;};
-  f = value;
-  return i;
-}
-
-inline double DecodeDouble(uint64_t value) {
-  union {double f; uint64_t i;};
-  i = value;
-  return f;
-}
-// end protobuf wire_format_lite.h funcs
 
 namespace crow {
 
@@ -275,6 +239,7 @@ namespace crow {
 
     /*
      * Tags are always 2 bytes (fieldIndex, FieldType)
+     * If encoded FieldType has bit 7 set, columnName will be set.
      */
     bool readTag(uint32_t &fieldIndex, FieldType &ft, std::string &columnName) {
       if (NONE_LEFT()) { return true; }
