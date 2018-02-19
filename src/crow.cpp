@@ -130,9 +130,14 @@ namespace crow {
     DecoderImpl() : Decoder(), _ptr(0L), _end(0L) {}
     ~DecoderImpl() {}
 
+
+
     bool decode(const Bytes &vec, DecoderListener &listener) override {
-      _ptr = vec.data();
-      _end = vec.data() + vec.size();
+      return decode((const uint8_t*)vec.data(), vec.size(), listener);
+    }
+    bool decode(const uint8_t* pEncData, size_t encLength, DecoderListener &listener) override {
+      _ptr = pEncData;
+      _end = _ptr + encLength;
 
       while(true) {
         uint32_t fieldIndex;

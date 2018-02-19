@@ -59,6 +59,7 @@ namespace crow {
   class Decoder {
   public:
     virtual bool decode(const Bytes &encodedSrc, DecoderListener &listener) = 0;
+    virtual bool decode(const uint8_t* pEncData, size_t encLength, DecoderListener &listener) = 0;
     virtual ~Decoder() {}
   };
 
