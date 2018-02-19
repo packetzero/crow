@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../include/simplepb.hpp"
+#include "../include/crow.hpp"
 
 void HexStringToVec(const std::string str, Bytes &dest);
 
@@ -16,8 +16,8 @@ TEST_F(DecTest, smallUnsignedInt) {
   vec[1] = TYPE_UINT32;
   vec[2] = 127;
 
-  auto dl = simplepb::DecoderLogger();
-  auto &dec = *simplepb::DecoderNew();
+  auto dl = crow::DecoderLogger();
+  auto &dec = *crow::DecoderNew();
   dec.decode(vec, dl);
 
   ASSERT_EQ("[ 3] uint32 127,", dl.str());
@@ -30,8 +30,8 @@ TEST_F(DecTest, u32) {
   // fieldIndex=1, type:uint32_t, value=0x8000FFFF (2147549183)
   HexStringToVec("0102ffff838008", vec);
 
-  auto dl = simplepb::DecoderLogger();
-  auto &dec = *simplepb::DecoderNew();
+  auto dl = crow::DecoderLogger();
+  auto &dec = *crow::DecoderNew();
   dec.decode(vec, dl);
 
   ASSERT_EQ("[ 1] uint32 2147549183,", dl.str());
@@ -42,12 +42,26 @@ TEST_F(DecTest, dub) {
   auto vec = std::vector<uint8_t>();
   HexStringToVec("090577be9f1a2fdd5e40", vec);
 
-  auto dl = simplepb::DecoderLogger();
-  auto &dec = *simplepb::DecoderNew();
+  auto dl = crow::DecoderLogger();
+  auto &dec = *crow::DecoderNew();
   dec.decode(vec, dl);
 
   ASSERT_EQ("[ 9] double 123.456,", dl.str());
 
+}
+
+TEST_F(DecTest, withColumnNames) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("00820566697273744d0187067365636f6e641d6e6f20737061636520746f2072656e7420696e207468697320746f776e", vec);
+  
+  auto dl = crow::DecoderLogger();
+  auto pDec = crow::DecoderNew();
+  auto &dec = *pDec;
+  dec.decode(vec, dl);
+  
+  ASSERT_EQ("[ 0]first uint32 77,[ 1]second \"no space to rent in this town\",", dl.str());
+  
+  delete pDec;
 }
 
 TEST_F(DecTest, simple) {
@@ -55,8 +69,8 @@ TEST_F(DecTest, simple) {
   auto vec = std::vector<uint8_t>();
   HexStringToVec("00015e0104ffff0302070568656c6c6f030577be9f1a2fdd5e40", vec);
 
-  auto dl = simplepb::DecoderLogger();
-  auto &dec = *simplepb::DecoderNew();
+  auto dl = crow::DecoderLogger();
+  auto &dec = *crow::DecoderNew();
   dec.decode(vec, dl);
 
   ASSERT_EQ("[ 0] int32 47,[ 1] uint64 65535,[ 2] \"hello\",[ 3] double 123.456,", dl.str());

@@ -1,4 +1,4 @@
-set (PROJECT_NAME simplepb)
+set (PROJECT_NAME crow)
 PROJECT(${PROJECT_NAME})
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.7)
@@ -22,6 +22,6 @@ add_library (${PROJECT_NAME} ${SRCS} ${HDRS})
 file(GLOB TESTSRCS "tests/*.c*")
 
 if($ENV{CONAN})
-  ADD_EXECUTABLE(simplepbtests ${TESTSRCS})
-  TARGET_LINK_LIBRARIES(simplepbtests simplepb ${CONAN_LIBS} )
+  ADD_EXECUTABLE(crowtests ${TESTSRCS})
+  TARGET_LINK_LIBRARIES(crowtests crow ${CONAN_LIBS} )
 endif()

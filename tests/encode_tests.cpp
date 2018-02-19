@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../include/simplepb.hpp"
+#include "../include/crow.hpp"
 
 void BytesToHexString(const unsigned char *bytes, size_t len, std::string &dest);
 void BytesToHexString(const Bytes &vec, std::string &dest);
@@ -13,7 +13,8 @@ class EncTest : public ::testing::Test {
 };
 
 TEST_F(EncTest, u32) {
-  auto &enc = *simplepb::EncoderNew();
+  auto pEnc = crow::EncoderNew();
+  auto &enc = *pEnc;
 
   uint32_t val = 7;
   enc.put(0, val);
@@ -32,10 +33,38 @@ TEST_F(EncTest, u32) {
   ASSERT_EQ(1, result[0]);
   ASSERT_EQ(2, result[1]);
 
+  delete pEnc;
 }
 
+TEST_F(EncTest, withColumnNames) {
+  auto pEnc = crow::EncoderNew();
+  auto &enc = *pEnc;
+  
+  uint32_t val = 77;
+  enc.put(0, val, "first");
+  enc.put(1,"no space to rent in this town", "second");
+  const uint8_t* result = enc.data();
+  
+  std::string s;
+  BytesToHexString(result, enc.size(), s);
+  
+  //    80 name.length name
+  // 00 82 05 6669727374    4d
+  // 01 87 06 7365636f6e64  1d 6e6f20737061636520746f2072656e7420696e207468697320746f776e
+  
+  ASSERT_EQ("00820566697273744d0187067365636f6e641d6e6f20737061636520746f2072656e7420696e207468697320746f776e", s);
+//  printf("%s\n", s.c_str());
+  
+//  ASSERT_EQ(3, enc.size());
+  
+  delete pEnc;
+}
+
+
+
 TEST_F(EncTest, i32) {
-  auto &enc = *simplepb::EncoderNew();
+  auto pEnc = crow::EncoderNew();
+  auto &enc = *pEnc;
 
   int32_t val = -2;
   enc.put(0, val);
@@ -47,13 +76,14 @@ TEST_F(EncTest, i32) {
 
   std::string s;
   BytesToHexString(result, enc.size(), s);
-  printf("%s\n", s.c_str());
+  //printf("%s\n", s.c_str());
 
-  enc.clear();
+  delete pEnc;
 }
 
 TEST_F(EncTest, dub) {
-  auto &enc = *simplepb::EncoderNew();
+  auto pEnc = crow::EncoderNew();
+  auto &enc = *pEnc;
 
   double val = 123.456;
   enc.put(9, val);
@@ -65,13 +95,13 @@ TEST_F(EncTest, dub) {
 
   std::string s;
   BytesToHexString(result, enc.size(), s);
-  printf("%s\n", s.c_str());
+  //printf("%s\n", s.c_str());
 
-  enc.clear();
+  delete pEnc;
 }
 
 TEST_F(EncTest, repeatedStrings) {
-  auto pEnc = simplepb::EncoderNew();
+  auto pEnc = crow::EncoderNew();
   auto &enc = *pEnc;
 
   uint32_t fieldIndex = 3;
@@ -88,8 +118,8 @@ TEST_F(EncTest, repeatedStrings) {
 
   std::string s;
   BytesToHexString(result, enc.size(), s);
-  printf("%s\n", s.c_str());
-  
+  //printf("%s\n", s.c_str());
+
   delete pEnc;
 }
 
@@ -103,21 +133,23 @@ TEST_F(EncTest, simple) {
   };
 
   A a = { 0x2F, 0x0FFFF, "hello", 123.456};
-  auto &pEnc = *simplepb::EncoderNew();
+  auto pEnc = crow::EncoderNew();
+  auto &enc = *pEnc;
+
   uint32_t fieldIndex = 0;
-  pEnc.put(fieldIndex++, a.i32val);  // 2 + 2
-  pEnc.put(fieldIndex++, a.u64val);  // 2 + 5
-  pEnc.put(fieldIndex++, a.strval);  // 2 + 1 + 5
-  pEnc.put(fieldIndex++, a.dval);   // 2 + 8
-  auto result = pEnc.data();
+  enc.put(fieldIndex++, a.i32val);  // 2 + 2
+  enc.put(fieldIndex++, a.u64val);  // 2 + 5
+  enc.put(fieldIndex++, a.strval);  // 2 + 1 + 5
+  enc.put(fieldIndex++, a.dval);   // 2 + 8
+  auto result = enc.data();
 
   std::string s;
-  BytesToHexString(result, pEnc.size(), s);
-  printf("%s\n", s.c_str());
+  BytesToHexString(result, enc.size(), s);
+  //printf("%s\n", s.c_str());
 
-  ASSERT_EQ(26, pEnc.size());
+  ASSERT_EQ(26, enc.size());
 
-  delete &pEnc;
+  delete pEnc;
 }
 
 static const char hexCharsLower[] = {
