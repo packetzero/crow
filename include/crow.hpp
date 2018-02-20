@@ -58,14 +58,44 @@ namespace crow {
 
   class Decoder {
   public:
-    virtual bool decode(const Bytes &encodedSrc, DecoderListener &listener) = 0;
-    virtual bool decode(const uint8_t* pEncData, size_t encLength, DecoderListener &listener) = 0;
+
+    /**
+     * @brief Decode a single row
+     * @return false on success, true if no data remaining or error.
+     */
+    virtual bool decodeRow(DecoderListener &listener) = 0;
+
+    /**
+     * @brief Decode all data and return number of rows.
+     */
+    virtual uint32_t decode(DecoderListener &listener) = 0;
+
+    /**
+     * @brief Scans for next RowSep tag, returns true if found.
+     *   Keeps track of bytes for entire row, for use by subsequent
+     *   calls to decodeField().
+     */
+    virtual bool scanRow() = 0;
+
+    /**
+     * @brief After a call to scanRow()==false, decodeField() can be used
+     *  to decode the first entry matching fieldIndex.
+     * @returns true if found, false otherwise.
+     */
+    virtual bool decodeField(uint32_t fieldIndex, DecoderListener& listener) = 0;
+
+    /**
+     * @brief Get highest fieldIndex in row.
+     */
+    virtual uint32_t getLastFieldIndex() = 0;
+
+    virtual void init(const uint8_t* pEncData, size_t encLength) = 0;
+
     virtual ~Decoder() {}
   };
 
   Encoder* EncoderNew(size_t initialCapacity = 4096);
-  Decoder* DecoderNew();
-
+  Decoder* DecoderNew(const uint8_t* pEncData, size_t encLength);
 
   class DecoderLogger : public DecoderListener {
   public:
