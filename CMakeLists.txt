@@ -17,3 +17,6 @@ if($ENV{MAKE_TESTS})
   ADD_EXECUTABLE(crowtests ${TESTSRCS})
   TARGET_LINK_LIBRARIES(crowtests crow gtest)
 endif()
+
+install(TARGETS ${PROJECT_NAME} ARCHIVE DESTINATION lib)
+install(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.hpp")
