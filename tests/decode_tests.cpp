@@ -1,6 +1,13 @@
 #include <gtest/gtest.h>
 #include "../include/crow.hpp"
 
+
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  int status= RUN_ALL_TESTS();
+  return status;
+}
+
 void HexStringToVec(const std::string str, Bytes &dest);
 
 class DecTest : public ::testing::Test {
@@ -31,11 +38,12 @@ TEST_F(DecTest, u32) {
   HexStringToVec("0102ffff838008", vec);
 
   auto dl = crow::DecoderLogger();
-  auto &dec = *crow::DecoderNew(vec.data(), vec.size());
-  dec.decode(dl);
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  pDec->decode(dl);
 
   ASSERT_EQ("[ 1] uint32 2147549183,", dl.str());
 
+  delete pDec;
 }
 
 TEST_F(DecTest, dub) {
@@ -100,6 +108,18 @@ TEST_F(DecTest, oneFieldAtATime) {
   }
 
   ASSERT_EQ("[ 0] int32 47,[ 1] uint64 65535,[ 2] \"hello\",[ 3] double 123.456,", dl.str());
+
+  delete pDec;
+}
+
+TEST_F(DecTest, empty) {
+  auto vec = std::vector<uint8_t>();
+
+  auto dl = crow::DecoderLogger();
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  pDec->decode(dl);
+
+  ASSERT_EQ("", dl.str());
 
   delete pDec;
 }

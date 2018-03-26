@@ -1,7 +1,7 @@
 #ifndef _SIMPLEPB_STACK_HPP_
 #define _SIMPLEPB_STACK_HPP_
 
-// This is a rip-off of RapidJson very well implemented internal/stack.
+// This is an adaptation of RapidJson's very well implemented internal/stack.
 // simplified without allocator and only for uint8_t
 
 // Tencent is pleased to support the open source community by making RapidJSON available.
