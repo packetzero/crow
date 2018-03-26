@@ -67,3 +67,11 @@ public:
 - A simplified version of [rapidjson/internal/stack.h](https://github.com/Tencent/rapidjson/blob/master/include/rapidjson/internal/stack.h) is used as the internal buffer.
 
 - Makes use of [libprotobuf encoding](https://developers.google.com/protocol-buffers/docs/encoding) methodology (Base 128 Varint, ZigZag transform, tags, length-delimited strings)
+
+### Building with tests
+You need to provide include and lib paths for gtest in order to build the tests.
+```
+mkdir build && cd build
+MAKE_TESTS=1 cmake -DCMAKE_CXX_FLAGS=-I~/googletest/include -DCMAKE_EXE_LINKER_FLAGS=-L~/googletest/lib ..
+make
+```
