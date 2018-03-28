@@ -42,8 +42,10 @@ namespace crow {
     /*
      * DecoderImpl constructor
      */
-    DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _ptr(pEncData), _end(pEncData + encLength), _fields(),
-      _err(0), _typemask(0L), _errOffset(0L), _setId(0L), _mapSets() {}
+    DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _ptr(pEncData),
+      _end(pEncData + encLength), _fields(), _err(0), _typemask(0L),
+      _errOffset(0L), _setId(0L), _mapSets(), _fieldIndexAdd(0), _byteCount(encLength) {
+    }
 
     ~DecoderImpl() {
       auto it = _mapSets.begin();
@@ -124,6 +126,10 @@ namespace crow {
           return true;
         }
 
+        if (_fieldIndexAdd != 0) {
+          fieldIndex |= _fieldIndexAdd;
+        }
+        
         if (_decodeField(fieldIndex, fieldType, columnName, listener, _ptr)) {
           break;
         }
@@ -148,10 +154,13 @@ namespace crow {
      */
     uint64_t getTypeMask() const override { return _typemask; }
 
+    virtual size_t getExpandedSize() override { return _byteCount; }
+
   private:
 
     bool _decodeField(uint32_t fieldIndex, FieldType fieldType, std::string &columnName, DecoderListener &listener, const uint8_t* &ptr) {
       _typemask |= (1UL << fieldType);
+  
       switch(fieldType) {
         case TYPE_INT32: {
           uint64_t tmp = readVarInt(ptr);
@@ -236,6 +245,7 @@ namespace crow {
           ptr += len;
           if (pContext != 0L) {
             auto setDecoder = DecoderImpl(pContext->data(), pContext->size());
+            setDecoder.setFieldIndexAdd(fieldIndex);
             setDecoder.decode(listener, setId);
           }
         }
@@ -247,7 +257,9 @@ namespace crow {
           if (pContext == 0L) {
             _markError(ESPIPE, ptr);
           } else {
+            _byteCount += pContext->size();
             auto setDecoder = DecoderImpl(pContext->data(), pContext->size());
+            setDecoder.setFieldIndexAdd(fieldIndex);
             setDecoder.decode(listener, setId);
           }
         }
@@ -291,6 +303,8 @@ namespace crow {
       return val;
     }
 
+    void setFieldIndexAdd(uint32_t value) override { _fieldIndexAdd = value; }
+    
     /*
      * Reads (varint-length, bytes) of a string at *ptr, but before *end.
      * If pColumnName is not nullptr, it will be initialized with string,
@@ -420,6 +434,8 @@ namespace crow {
     uint64_t       _errOffset;
     uint64_t       _setId;
     std::map<uint64_t, SetContext*> _mapSets;
+    uint32_t       _fieldIndexAdd;
+    size_t         _byteCount;
 
     uint64_t readVarInt(const uint8_t* &ptr) {
       uint64_t value = 0L;
@@ -523,7 +539,7 @@ namespace crow {
      *
      * @return true on error, false on success.
      */
-    bool putSet(uint64_t appSetId, Encoder& encForSet, uint32_t fieldIndexAdd = 0U) override {
+    bool putSet(uint64_t appSetId, Encoder& encForSet, uint32_t fieldIndexAdd) override {
 
       // sanity check to make sure we haven't already encountered setId
 
@@ -551,6 +567,8 @@ namespace crow {
 
       memcpy(_stack.Push(encForSet.size()), encForSet.data(), encForSet.size());
 
+      // update map
+
       _mapSets[appSetId] = setId;
 
       return false;
@@ -561,7 +579,7 @@ namespace crow {
      *
      * @returns true on error, false on success.
      */
-    bool putSetRef(uint64_t appSetId, uint32_t fieldIndexAdd = 0U) override {
+    bool putSetRef(uint64_t appSetId, uint32_t fieldIndexAdd) override {
       auto fit = _mapSets.find(appSetId);
       if (fit == _mapSets.end()) return true;
 

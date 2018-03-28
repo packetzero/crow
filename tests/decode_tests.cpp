@@ -23,7 +23,7 @@ TEST_F(DecTest, smallUnsignedInt) {
   vec[1] = TYPE_UINT32;
   vec[2] = 127;
 
-  auto dl = crow::DecoderLogger();
+  auto dl = crow::GenericDecoderListener();
   auto &dec = *crow::DecoderNew(vec.data(), vec.size());
   dec.decode(dl);
 
@@ -37,7 +37,7 @@ TEST_F(DecTest, u32) {
   // fieldIndex=1, type:uint32_t, value=0x8000FFFF (2147549183)
   HexStringToVec("0102ffff838008", vec);
 
-  auto dl = crow::DecoderLogger();
+  auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
   pDec->decode(dl);
 
@@ -50,7 +50,7 @@ TEST_F(DecTest, dub) {
   auto vec = std::vector<uint8_t>();
   HexStringToVec("090577be9f1a2fdd5e40", vec);
 
-  auto dl = crow::DecoderLogger();
+  auto dl = crow::GenericDecoderListener();
   auto &dec = *crow::DecoderNew(vec.data(), vec.size());
   dec.decode(dl);
 
@@ -62,12 +62,12 @@ TEST_F(DecTest, withColumnNames) {
   auto vec = std::vector<uint8_t>();
   HexStringToVec("00820566697273744d0187067365636f6e641d6e6f20737061636520746f2072656e7420696e207468697320746f776e", vec);
 
-  auto dl = crow::DecoderLogger();
+  auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
 
-  ASSERT_EQ("[ 0]first uint32 77,[ 1]second \"no space to rent in this town\",", dl.str());
+  ASSERT_EQ("[ 0]first uint32 77,[ 1]second  \"no space to rent in this town\",", dl.str());
 
   delete pDec;
 }
@@ -77,11 +77,11 @@ TEST_F(DecTest, simple) {
   auto vec = std::vector<uint8_t>();
   HexStringToVec("00015e0104ffff0302070568656c6c6f030577be9f1a2fdd5e40", vec);
 
-  auto dl = crow::DecoderLogger();
+  auto dl = crow::GenericDecoderListener();
   auto &dec = *crow::DecoderNew(vec.data(), vec.size());
   dec.decode(dl);
 
-  ASSERT_EQ("[ 0] int32 47,[ 1] uint64 65535,[ 2] \"hello\",[ 3] double 123.456,", dl.str());
+  ASSERT_EQ("[ 0] int32 47,[ 1] uint64 65535,[ 2]  \"hello\",[ 3] double 123.456,", dl.str());
 
   //delete &dec;
 }
@@ -91,7 +91,7 @@ TEST_F(DecTest, oneFieldAtATime) {
   auto vec = std::vector<uint8_t>();
   HexStringToVec("00015e0104ffff0302070568656c6c6f030577be9f1a2fdd5e400009", vec);
 
-  auto dl = crow::DecoderLogger();
+  auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
   auto &dec = *pDec;
 
@@ -107,7 +107,7 @@ TEST_F(DecTest, oneFieldAtATime) {
     }
   }
 
-  ASSERT_EQ("[ 0] int32 47,[ 1] uint64 65535,[ 2] \"hello\",[ 3] double 123.456,", dl.str());
+  ASSERT_EQ("[ 0] int32 47,[ 1] uint64 65535,[ 2]  \"hello\",[ 3] double 123.456,", dl.str());
 
   delete pDec;
 }
@@ -115,7 +115,7 @@ TEST_F(DecTest, oneFieldAtATime) {
 TEST_F(DecTest, empty) {
   auto vec = std::vector<uint8_t>();
 
-  auto dl = crow::DecoderLogger();
+  auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
   pDec->decode(dl);
 

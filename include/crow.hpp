@@ -136,11 +136,22 @@ namespace crow {
      * returns bitwise OR of all TYPE_XX encountered in decoding.
      */
     virtual uint64_t getTypeMask() const = 0;
+
+    /**
+     * Indicate that value will be added to the fieldIndex of every decoded field.
+     * Used for sets of bi-directional data.
+     */
+    virtual void setFieldIndexAdd(uint32_t value) = 0;
+
+    /**
+     * After decoding is finished, returns number of bytes after placing sets
+     */
+    virtual size_t getExpandedSize() = 0;
   };
 
   Encoder* EncoderNew(size_t initialCapacity = 4096);
   Decoder* DecoderNew(const uint8_t* pEncData, size_t encLength);
-
+/*
   class DecoderLogger : public DecoderListener {
   public:
     DecoderLogger() : s() {}
@@ -186,6 +197,121 @@ namespace crow {
     char tmp[256];
     std::string s;
   };
+*/
+  /* struct to encapsulate any decoded column value.  Used by GenericDecoderListener */
+
+  struct DecColValue {
+    uint32_t fieldIndex;
+    FieldType fieldType;
+    std::string name;
+    uint64_t setId;
+    union {
+      int32_t i32val;
+      uint32_t u32val;
+      int64_t i64val;
+      uint64_t u64val;
+      int8_t i8val;
+      uint8_t u8val;
+      double dval;
+    };
+    std::string strval;
+
+    DecColValue(uint32_t fidx, FieldType ftype, std::string namo, uint64_t sid,
+      std::string sval) : fieldIndex(fidx), fieldType(ftype), name(namo),
+      setId(sid), u64val(0), strval(sval) {
+    }
+  };
+
+  class GenericDecoderListener : public DecoderListener {
+  public:
+    GenericDecoderListener() : _rows() {
+    }
+    void onField(uint32_t fieldIndex, int32_t value, const std::string name_optional, uint64_t setId) override {
+      sprintf(tmp,"%d", value);
+      auto v = DecColValue(fieldIndex, TYPE_INT32, name_optional, setId, std::string(tmp));
+      v.i32val = value;
+      _addValue(v);
+    }
+    void onField(uint32_t fieldIndex, uint32_t value, const std::string name_optional, uint64_t setId) override {
+      sprintf(tmp,"%u", value);
+      auto v = DecColValue(fieldIndex, TYPE_UINT32, name_optional, setId, std::string(tmp));
+      v.u32val = value;
+      _addValue(v);
+    }
+    void onField(uint32_t fieldIndex, int64_t value, const std::string name_optional, uint64_t setId) override {
+      sprintf(tmp,"%lld", value);
+      auto v = DecColValue(fieldIndex, TYPE_INT64, name_optional, setId, std::string(tmp));
+      v.i64val = value;
+      _addValue(v);
+    }
+    void onField(uint32_t fieldIndex, uint64_t value, const std::string name_optional, uint64_t setId) override {
+      sprintf(tmp,"%llu", value);
+      auto v = DecColValue(fieldIndex, TYPE_UINT64, name_optional, setId, std::string(tmp));
+      v.u64val = value;
+      _addValue(v);
+    }
+    void onField(uint32_t fieldIndex, double value, const std::string name_optional, uint64_t setId) override {
+      sprintf(tmp,"%.3f", value);
+      auto v = DecColValue(fieldIndex, TYPE_DOUBLE, name_optional, setId, std::string(tmp));
+      v.dval = value;
+      _addValue(v);
+    }
+    void onField(uint32_t fieldIndex, const std::string &value, const std::string name_optional, uint64_t setId) override {
+      auto v = DecColValue(fieldIndex, TYPE_STRING, name_optional, setId, value);
+      _addValue(v);
+    }
+    void onField(uint32_t fieldIndex, const std::vector<uint8_t> value, const std::string name_optional, uint64_t setId) override {
+      auto v = DecColValue(fieldIndex, TYPE_INT32, name_optional, setId, "");
+      v.strval.assign((const char *)value.data(), value.size());
+      _addValue(v);
+    }
+
+    void onRowSep() override { _rows.push_back(std::vector<DecColValue>()); }
+
+    std::string str() {
+      std::string s;
+      for (auto &row : _rows) {
+        for (auto &col : row) {
+          s += _render(col.fieldIndex, col.strval, col.name, col.setId, col.fieldType);
+        }
+      }
+      return s;
+    }
+    
+    std::string _typeName(FieldType ft) {
+      switch(ft) {
+        case TYPE_BOOL: return "bool";
+        case TYPE_INT32: return "int32";
+        case TYPE_UINT32: return "uint32";
+        case TYPE_INT64: return "int64";
+        case TYPE_UINT64: return "uint64";
+        case TYPE_DOUBLE: return "double";
+        default:
+          break;
+      }
+      return "";
+    }
+
+    std::string _render(uint32_t fieldIndex, const std::string val, const std::string name_optional, uint64_t setId, FieldType ft) {
+      char tmp[128];
+      sprintf(tmp, "[%2d]%s %s %s%s%s", fieldIndex, (name_optional.length() > 0 ? name_optional.c_str() : ""), _typeName(ft).c_str(), (ft == TYPE_STRING ? "\"" : ""), val.c_str(), (ft == TYPE_STRING ? "\"" : ""));
+      std::string s = std::string(tmp);
+      if (setId > 0) { sprintf(tmp, " SET:%llx", setId); s += std::string(tmp);}
+      s += ",";
+      return s;
+    }
+    std::vector< std::vector<DecColValue > > _rows;
+
+  private:
+
+    void _addValue(DecColValue& val) {
+      if (_rows.size() == 0) { _rows.push_back(std::vector<DecColValue>()); }
+      _rows[_rows.size()-1].push_back(val);
+    }
+
+    char tmp[64];
+  };
+
 
 }
 
