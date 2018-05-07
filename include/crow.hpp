@@ -161,7 +161,7 @@ namespace crow {
      */
     virtual uint32_t decode(DecoderListener &listener, uint64_t setId = 0) = 0;
 
-    virtual void init(const uint8_t* pEncData, size_t encLength) = 0;
+    //virtual void init(const uint8_t* pEncData, size_t encLength) = 0;
 
     virtual ~Decoder() {}
 
@@ -193,7 +193,8 @@ namespace crow {
   /* struct to encapsulate any decoded column value.  Used by GenericDecoderListener */
 
   struct DecColValue {
-    const Field *pField;
+    uint8_t fieldIndex;
+    CrowType typeId;
     uint64_t setId;
     union {
       int32_t i32val;
@@ -206,10 +207,9 @@ namespace crow {
     };
     std::string strval;
 
-    DecColValue() : pField(0L), setId(0), i64val(0), strval() {}
+    DecColValue() : fieldIndex(0), typeId(CrowType::NONE), setId(0), i64val(0), strval() {}
 
-    DecColValue(const Field *pField,
-      std::string sval) : pField(pField),
+    DecColValue(uint8_t idx, CrowType typ, std::string sval) : fieldIndex(idx), typeId(typ),
       setId(0L), u64val(0), strval(sval) {
     }
   };
@@ -219,98 +219,62 @@ namespace crow {
   class GenericDecoderListener : public DecoderListener {
   public:
 
-    GenericDecoderListener() : _rows() {
+    GenericDecoderListener() : _rows(), _rownum(0) {
     }
     void onField(const Field *pField, int32_t value) override {
       sprintf(tmp,"%d", value);
-      auto v = DecColValue(pField, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
       v.i32val = value;
       _addValue(v);
     }
     void onField(const Field *pField, uint32_t value) override {
       sprintf(tmp,"%u", value);
-      auto v = DecColValue(pField, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
       v.u32val = value;
       _addValue(v);
     }
     void onField(const Field *pField, int64_t value) override {
       sprintf(tmp,"%lld", value);
-      auto v = DecColValue(pField, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
       v.i64val = value;
       _addValue(v);
     }
     void onField(const Field *pField, uint64_t value) override {
       sprintf(tmp,"%llu", value);
-      auto v = DecColValue(pField, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
       v.u64val = value;
       _addValue(v);
     }
     void onField(const Field *pField, double value) override {
       sprintf(tmp,"%.3f", value);
-      auto v = DecColValue(pField, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
       v.dval = value;
       _addValue(v);
     }
     void onField(const Field *pField, const std::string &value) override {
-      auto v = DecColValue(pField, value);
+      auto v = DecColValue(pField->index, pField->typeId, value);
       _addValue(v);
     }
     void onField(const Field *pField, const std::vector<uint8_t> value) override {
-      auto v = DecColValue(pField, "");
+      auto v = DecColValue(pField->index, pField->typeId, "");
       v.strval.assign((const char *)value.data(), value.size());
       _addValue(v);
     }
 
-    void onRowSep() override { _rows.push_back(GenDecRow()); }
+    void onRowSep() override { _rownum++; }
 
-    std::string str() {
-      std::string s;
-      for (auto &row : _rows) {
-        for (auto it = row.begin(); it != row.end(); it++) {
-          auto &col = it->second;
-          s += _render(col.pField, col.strval);
-        }
-      }
-      return s;
-    }
-
-    std::string _typeName(CrowType ft) {
-      switch(ft) {
-        case TINT32: return "int32";
-        case TUINT32: return "uint32";
-        case TINT64: return "int64";
-        case TUINT64: return "uint64";
-        case TFLOAT64: return "double";
-        default:
-          break;
-      }
-      return "";
-    }
-
-    std::string _render(const Field *pField, const std::string val) {
-      char tmp[128];
-      sprintf(tmp, "[%2d]%s %s %s%s%s", pField->index,
-        (pField->name.length() > 0 ? pField->name.c_str() : ""),
-        _typeName((CrowType)pField->typeId).c_str(),
-        (pField->typeId == TSTRING ? "\"" : ""),
-        val.c_str(),
-        (pField->typeId == TSTRING ? "\"" : ""));
-      std::string s = std::string(tmp);
-      //if (setId > 0) { sprintf(tmp, " SET:%llx", setId); s += std::string(tmp);}
-      s += ",";
-      return s;
-    }
     std::vector< GenDecRow > _rows;
 
   private:
 
-    void _addValue(DecColValue& val) {
-      if (_rows.size() == 0) {
+    void _addValue(DecColValue val) {
+      if (_rows.size() <= _rownum) {
         _rows.push_back(GenDecRow());
       }
-      _rows[_rows.size()-1][val.pField->index] = val;
+      _rows[_rows.size()-1][val.fieldIndex] = val;
     }
 
+    size_t _rownum;
     char tmp[64];
   };
 

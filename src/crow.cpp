@@ -71,11 +71,13 @@ namespace crow {
       return numRows;
     }
 
+/*
     void init(const uint8_t* pEncData, size_t encLength) override {
       _ptr = pEncData;
       _end = pEncData + encLength;
       _fields.clear();
     }
+*/
 
     bool decodeRow(DecoderListener &listener) override {
 
@@ -88,7 +90,9 @@ namespace crow {
         if ((tagid & UPPER_BIT) != 0) {
 
           uint8_t index = tagid & (uint8_t)0x7F;
-          if (index >= _fields.size()) { _markError(EINVAL, _ptr); return true; }
+          if (index >= _fields.size()) {
+            _markError(EINVAL, _ptr); return true;
+          }
           const Field* pField = &_fields[index];
 
           if (_decodeValue(pField, _ptr, listener)) {
@@ -224,6 +228,13 @@ namespace crow {
         }
         break;
 
+        case TFLOAT32: {
+          uint64_t tmp = readFixed32(ptr);
+          double val = DecodeFloat(tmp);
+          listener.onField(pField, val);
+        }
+        break;
+
         case TUINT8: {
           uint8_t val = *ptr++;
           listener.onField(pField, val);
@@ -327,7 +338,18 @@ namespace crow {
         return 0L;
       }
       uint64_t val = *((uint64_t*)ptr);
-      ptr += 8;
+      ptr += sizeof(val);
+      return val;
+    }
+
+    uint64_t readFixed32(const uint8_t* &ptr)
+    {
+      if ((_end - ptr) < sizeof(uint32_t)) {
+        _markError(ENOSPC, ptr);
+        return 0L;
+      }
+      uint32_t val = *((uint32_t*)ptr);
+      ptr += sizeof(val);
       return val;
     }
 

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "../include/crow.hpp"
 
+#ifdef NEVER
 /*
  * Some made-up structures to test relational (SETREL) scenarios
  */
@@ -118,7 +119,7 @@ TEST_F(SetRefTest, basic) {
       pSetEnc->put(COL_ADDR_IFNAME, flow.raddr->ifname);
       enc.putSet((uint64_t)flow.raddr, *pSetEnc, COL_REVERSE);
     }
-    
+
     enc.put(COL_STAT_BYTES, flow.lbytes);
     enc.put(COL_STAT_PACKETS, flow.lpackets);
     enc.put(COL_STAT_BYTES | COL_REVERSE, flow.rbytes);
@@ -163,3 +164,4 @@ TEST_F(SetRefTest, basic) {
   ASSERT_EQ("mylaptop.local", dl._rows[2][10].strval);
   ASSERT_EQ(COL_ADDR_HOSTNAME , dl._rows[2][10].fieldIndex);
 }
+#endif // NEVER
