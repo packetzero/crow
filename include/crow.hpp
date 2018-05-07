@@ -5,37 +5,94 @@
 #include <string>
 #include <vector>
 
-enum FieldType {
-  TYPE_INT32          = 1,
-  TYPE_UINT32         = 2,
-  TYPE_INT64          = 3,
-  TYPE_UINT64         = 4,
-  TYPE_DOUBLE         = 5,
-  TYPE_BOOL           = 6,
-  TYPE_STRING         = 7,
-  TYPE_BYTES          = 8,
-  TYPE_ROWSEP         = 9,
-  TYPE_SET            = 10,
-  TYPE_SETREF         = 11,
-  MAX_FIELD_TYPE      = 12,
+enum CrowTag {
+    TUNKNOWN,
+    TFIELDINFO,      // 1
+    TBLOCK,          // 2
+    TROWSEP,         // 3
+    TSET,            // 6
+    TSETREF,         // 7
+
+    NUMTAGS
+};
+
+enum CrowType {
+    NONE,
+    TSTRING,         // 1
+    TINT32,          // 2
+    TUINT32,         // 3
+    TINT64,          // 4
+    TUINT64,         // 5
+    TINT16,          // 6
+    TUINT16,         // 7
+    TINT8,           // 8
+    TUINT8,          // 9
+
+    TFLOAT32,        // 10
+    TFLOAT64,        // 11
+    TBYTES,          // 12
+
+    NUM_TYPES
 };
 
 typedef std::vector<uint8_t> Bytes;
 
+#define PUT_ID(ENC,ID,VAL) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),ID),VAL)
+#define PUT_ID2(ENC,ID,SUBID,VAL) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),ID,SUBID),VAL)
+#define PUT_NAME(ENC,NAME,VAL) (ENC)->put( (ENC)->fieldFor(crow::type_for(VAL),NAME), VAL)
+
+#define PUT_ID_PTR(ENC,ID,VAL,LEN) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),ID),VAL,LEN)
+#define PUT_ID2_PTR(ENC,ID,SUBID,VAL,LEN) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),ID,SUBID),VAL,LEN)
+#define PUT_NAME_PTR(ENC,NAME,VAL,LEN) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),NAME),VAL,LEN)
+
 namespace crow {
+
+  class Field {
+  public:
+    CrowType    typeId;
+    uint32_t    id;
+    uint32_t    subid;
+    std::string name;
+    uint8_t     index;
+
+    bool        _written;
+  };
+
+  inline CrowType type_for(double val) { return TFLOAT64; }
+  inline CrowType type_for(float val) { return TFLOAT32; }
+  inline CrowType type_for(const std::string val) { return TSTRING; }
+  inline CrowType type_for(uint8_t val) { return TUINT8; }
+  inline CrowType type_for(int8_t val) { return TINT8; }
+  inline CrowType type_for(uint16_t val) { return TUINT16; }
+  inline CrowType type_for(int16_t val) { return TINT16; }
+  inline CrowType type_for(uint32_t val) { return TUINT32; }
+  inline CrowType type_for(int32_t val) { return TINT32; }
+  inline CrowType type_for(uint64_t val) { return TUINT64; }
+  inline CrowType type_for(int64_t val) { return TINT64; }
+  inline CrowType type_for(bool val) { return TUINT8; }
+  inline CrowType type_for(const char * val) { return TSTRING; }
+  inline CrowType type_for(const uint8_t * val) { return TBYTES; }
 
   class Encoder {
   public:
-    virtual void put(uint32_t fieldIndex, int32_t value, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, uint32_t value, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, int64_t value, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, uint64_t value, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, double value, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, const std::string value, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, const char* str, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, const std::vector<uint8_t>& value, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, const uint8_t* bytes, size_t len, const std::string name = "") = 0;
-    virtual void put(uint32_t fieldIndex, bool value, const std::string name = "") = 0;
+    virtual Field *fieldFor(CrowType type, uint32_t id, uint32_t subid = 0) = 0;
+    virtual Field *fieldFor(CrowType type, std::string name) = 0;
+
+    virtual void put(const Field *pField, int32_t value) = 0;
+    virtual void put(const Field *pField, uint32_t value) = 0;
+    virtual void put(const Field *pField, int64_t value) = 0;
+    virtual void put(const Field *pField, uint64_t value) = 0;
+    virtual void put(const Field *pField, int8_t value) = 0;
+    virtual void put(const Field *pField, uint8_t value) = 0;
+    virtual void put(const Field *pField, int16_t value) = 0;
+    virtual void put(const Field *pField, uint16_t value) = 0;
+    virtual void put(const Field *pField, double value) = 0;
+    virtual void put(const Field *pField, float value) = 0;
+    virtual void put(const Field *pField, const std::string value) = 0;
+    virtual void put(const Field *pField, const char* str) = 0;
+    virtual void put(const Field *pField, const std::vector<uint8_t>& value) = 0;
+    virtual void put(const Field *pField, const uint8_t* bytes, size_t len) = 0;
+    virtual void put(const Field *pField, bool value) = 0;
 
     virtual void putRowSep() = 0;
 
@@ -62,14 +119,14 @@ namespace crow {
      *
      * @return true on error, false on success.
      */
-    virtual bool putSet(uint64_t setId, Encoder& encForSet, uint32_t fieldIndexAdd = 0U) = 0;
+//    virtual bool putSet(uint64_t setId, Encoder& encForSet, uint32_t fieldIndexAdd = 0U) = 0;
 
     /**
      * @brief If found (previous call to putSet(setId) was made), places SETREF.
      *
      * @returns true on error, false on success.
      */
-    virtual bool putSetRef(uint64_t setId, uint32_t fieldIndexAdd = 0U) = 0;
+//    virtual bool putSetRef(uint64_t setId, const Field *pFieldAdd = 0U) = 0;
 
     virtual const uint8_t* data() const = 0;
     virtual size_t size() const = 0;
@@ -80,13 +137,13 @@ namespace crow {
 
   class DecoderListener {
   public:
-    virtual void onField(uint32_t fieldIndex, int32_t value, const std::string name_optional="", uint64_t setId=0) {}
-    virtual void onField(uint32_t fieldIndex, uint32_t value, const std::string name_optional="", uint64_t setId=0) {}
-    virtual void onField(uint32_t fieldIndex, int64_t value, const std::string name_optional="", uint64_t setId=0) {}
-    virtual void onField(uint32_t fieldIndex, uint64_t value, const std::string name_optional="", uint64_t setId=0) {}
-    virtual void onField(uint32_t fieldIndex, double value, const std::string name_optional="", uint64_t setId=0) {}
-    virtual void onField(uint32_t fieldIndex, const std::string &value, const std::string name_optional="", uint64_t setId=0) {}
-    virtual void onField(uint32_t fieldIndex, const std::vector<uint8_t> value, const std::string name_optional="", uint64_t setId=0) {}
+    virtual void onField(const Field *pField, int32_t value) {}
+    virtual void onField(const Field *pField, uint32_t value) {}
+    virtual void onField(const Field *pField, int64_t value) {}
+    virtual void onField(const Field *pField, uint64_t value) {}
+    virtual void onField(const Field *pField, double value) {}
+    virtual void onField(const Field *pField, const std::string &value) {}
+    virtual void onField(const Field *pField, const std::vector<uint8_t> value) {}
     virtual void onRowSep() {}
   };
 
@@ -103,25 +160,6 @@ namespace crow {
      * @brief Decode all data and return number of rows.
      */
     virtual uint32_t decode(DecoderListener &listener, uint64_t setId = 0) = 0;
-
-    /**
-     * @brief Scans for next RowSep tag, returns true if found.
-     *   Keeps track of bytes for entire row, for use by subsequent
-     *   calls to decodeField().
-     */
-    virtual bool scanRow() = 0;
-
-    /**
-     * @brief After a call to scanRow()==false, decodeField() can be used
-     *  to decode the first entry matching fieldIndex.
-     * @returns true if found, false otherwise.
-     */
-    virtual bool decodeField(uint32_t fieldIndex, DecoderListener& listener) = 0;
-
-    /**
-     * @brief Get highest fieldIndex in row.
-     */
-    virtual uint32_t getLastFieldIndex() = 0;
 
     virtual void init(const uint8_t* pEncData, size_t encLength) = 0;
 
@@ -141,7 +179,7 @@ namespace crow {
      * Indicate that value will be added to the fieldIndex of every decoded field.
      * Used for sets of bi-directional data.
      */
-    virtual void setFieldIndexAdd(uint32_t value) = 0;
+    //virtual void setFieldIndexAdd(uint32_t value) = 0;
 
     /**
      * After decoding is finished, returns number of bytes after placing sets
@@ -151,59 +189,11 @@ namespace crow {
 
   Encoder* EncoderNew(size_t initialCapacity = 4096);
   Decoder* DecoderNew(const uint8_t* pEncData, size_t encLength);
-/*
-  class DecoderLogger : public DecoderListener {
-  public:
-    DecoderLogger() : s() {}
-    void onField(uint32_t fieldIndex, int32_t value, const std::string name_optional, uint64_t setId) override {
-      sprintf(tmp,"int32 %d", value);
-      _render(fieldIndex, std::string(tmp), name_optional, setId);
-     }
-    void onField(uint32_t fieldIndex, uint32_t value, const std::string name_optional, uint64_t setId) override {
-      sprintf(tmp,"uint32 %u", value);
-      _render(fieldIndex, std::string(tmp), name_optional, setId);
-    }
-    void onField(uint32_t fieldIndex, int64_t value, const std::string name_optional, uint64_t setId) override {
-      sprintf(tmp,"int64 %lld", value);
-      _render(fieldIndex, std::string(tmp), name_optional, setId);
-    }
-    void onField(uint32_t fieldIndex, uint64_t value, const std::string name_optional, uint64_t setId) override {
-      sprintf(tmp,"uint64 %llu", value);
-      _render(fieldIndex, std::string(tmp), name_optional, setId);
-    }
-    void onField(uint32_t fieldIndex, double value, const std::string name_optional, uint64_t setId) override {
-      sprintf(tmp,"double %.3f", value);
-      _render(fieldIndex, std::string(tmp), name_optional, setId);
-    }
-    void onField(uint32_t fieldIndex, const std::string &value, const std::string name_optional, uint64_t setId) override {
-      sprintf(tmp, "\"%s\"", value.c_str());
-      _render(fieldIndex, std::string(tmp), name_optional, setId);
-    }
-    void onField(uint32_t fieldIndex, const std::vector<uint8_t> value, const std::string name_optional, uint64_t setId) override {
-      sprintf(tmp,"bytes [%lu]", value.size());
-      _render(fieldIndex, std::string(tmp), name_optional, setId);
-    }
 
-    std::string str() { return s; }
-  private:
-
-    void _render(uint32_t fieldIndex, const std::string val, const std::string name_optional, uint64_t setId) {
-      sprintf(tmp, "[%2d]%s %s", fieldIndex, (name_optional.length() > 0 ? name_optional.c_str() : ""), val.c_str());
-      s += std::string(tmp);
-      if (setId > 0) { sprintf(tmp, " SET:%llx", setId); s += std::string(tmp);}
-      s += ",";
-    }
-
-    char tmp[256];
-    std::string s;
-  };
-*/
   /* struct to encapsulate any decoded column value.  Used by GenericDecoderListener */
 
   struct DecColValue {
-    uint32_t fieldIndex;
-    FieldType fieldType;
-    std::string name;
+    const Field *pField;
     uint64_t setId;
     union {
       int32_t i32val;
@@ -216,97 +206,109 @@ namespace crow {
     };
     std::string strval;
 
-    DecColValue(uint32_t fidx, FieldType ftype, std::string namo, uint64_t sid,
-      std::string sval) : fieldIndex(fidx), fieldType(ftype), name(namo),
-      setId(sid), u64val(0), strval(sval) {
+    DecColValue() : pField(0L), setId(0), i64val(0), strval() {}
+
+    DecColValue(const Field *pField,
+      std::string sval) : pField(pField),
+      setId(0L), u64val(0), strval(sval) {
     }
   };
 
+  typedef std::map<uint8_t, DecColValue> GenDecRow;
+
   class GenericDecoderListener : public DecoderListener {
   public:
+
     GenericDecoderListener() : _rows() {
     }
-    void onField(uint32_t fieldIndex, int32_t value, const std::string name_optional, uint64_t setId) override {
+    void onField(const Field *pField, int32_t value) override {
       sprintf(tmp,"%d", value);
-      auto v = DecColValue(fieldIndex, TYPE_INT32, name_optional, setId, std::string(tmp));
+      auto v = DecColValue(pField, std::string(tmp));
       v.i32val = value;
       _addValue(v);
     }
-    void onField(uint32_t fieldIndex, uint32_t value, const std::string name_optional, uint64_t setId) override {
+    void onField(const Field *pField, uint32_t value) override {
       sprintf(tmp,"%u", value);
-      auto v = DecColValue(fieldIndex, TYPE_UINT32, name_optional, setId, std::string(tmp));
+      auto v = DecColValue(pField, std::string(tmp));
       v.u32val = value;
       _addValue(v);
     }
-    void onField(uint32_t fieldIndex, int64_t value, const std::string name_optional, uint64_t setId) override {
+    void onField(const Field *pField, int64_t value) override {
       sprintf(tmp,"%lld", value);
-      auto v = DecColValue(fieldIndex, TYPE_INT64, name_optional, setId, std::string(tmp));
+      auto v = DecColValue(pField, std::string(tmp));
       v.i64val = value;
       _addValue(v);
     }
-    void onField(uint32_t fieldIndex, uint64_t value, const std::string name_optional, uint64_t setId) override {
+    void onField(const Field *pField, uint64_t value) override {
       sprintf(tmp,"%llu", value);
-      auto v = DecColValue(fieldIndex, TYPE_UINT64, name_optional, setId, std::string(tmp));
+      auto v = DecColValue(pField, std::string(tmp));
       v.u64val = value;
       _addValue(v);
     }
-    void onField(uint32_t fieldIndex, double value, const std::string name_optional, uint64_t setId) override {
+    void onField(const Field *pField, double value) override {
       sprintf(tmp,"%.3f", value);
-      auto v = DecColValue(fieldIndex, TYPE_DOUBLE, name_optional, setId, std::string(tmp));
+      auto v = DecColValue(pField, std::string(tmp));
       v.dval = value;
       _addValue(v);
     }
-    void onField(uint32_t fieldIndex, const std::string &value, const std::string name_optional, uint64_t setId) override {
-      auto v = DecColValue(fieldIndex, TYPE_STRING, name_optional, setId, value);
+    void onField(const Field *pField, const std::string &value) override {
+      auto v = DecColValue(pField, value);
       _addValue(v);
     }
-    void onField(uint32_t fieldIndex, const std::vector<uint8_t> value, const std::string name_optional, uint64_t setId) override {
-      auto v = DecColValue(fieldIndex, TYPE_INT32, name_optional, setId, "");
+    void onField(const Field *pField, const std::vector<uint8_t> value) override {
+      auto v = DecColValue(pField, "");
       v.strval.assign((const char *)value.data(), value.size());
       _addValue(v);
     }
 
-    void onRowSep() override { _rows.push_back(std::vector<DecColValue>()); }
+    void onRowSep() override { _rows.push_back(GenDecRow()); }
 
     std::string str() {
       std::string s;
       for (auto &row : _rows) {
-        for (auto &col : row) {
-          s += _render(col.fieldIndex, col.strval, col.name, col.setId, col.fieldType);
+        for (auto it = row.begin(); it != row.end(); it++) {
+          auto &col = it->second;
+          s += _render(col.pField, col.strval);
         }
       }
       return s;
     }
-    
-    std::string _typeName(FieldType ft) {
+
+    std::string _typeName(CrowType ft) {
       switch(ft) {
-        case TYPE_BOOL: return "bool";
-        case TYPE_INT32: return "int32";
-        case TYPE_UINT32: return "uint32";
-        case TYPE_INT64: return "int64";
-        case TYPE_UINT64: return "uint64";
-        case TYPE_DOUBLE: return "double";
+        case TINT32: return "int32";
+        case TUINT32: return "uint32";
+        case TINT64: return "int64";
+        case TUINT64: return "uint64";
+        case TFLOAT64: return "double";
         default:
           break;
       }
       return "";
     }
 
-    std::string _render(uint32_t fieldIndex, const std::string val, const std::string name_optional, uint64_t setId, FieldType ft) {
+    std::string _render(const Field *pField, const std::string val) {
       char tmp[128];
-      sprintf(tmp, "[%2d]%s %s %s%s%s", fieldIndex, (name_optional.length() > 0 ? name_optional.c_str() : ""), _typeName(ft).c_str(), (ft == TYPE_STRING ? "\"" : ""), val.c_str(), (ft == TYPE_STRING ? "\"" : ""));
+      sprintf(tmp, "[%2d]%s %s %s%s%s", pField->index,
+        (pField->name.length() > 0 ? pField->name.c_str() : ""),
+        _typeName((CrowType)pField->typeId).c_str(),
+        (pField->typeId == TSTRING ? "\"" : ""),
+        val.c_str(),
+        (pField->typeId == TSTRING ? "\"" : ""));
       std::string s = std::string(tmp);
-      if (setId > 0) { sprintf(tmp, " SET:%llx", setId); s += std::string(tmp);}
+      //if (setId > 0) { sprintf(tmp, " SET:%llx", setId); s += std::string(tmp);}
       s += ",";
       return s;
     }
-    std::vector< std::vector<DecColValue > > _rows;
+    std::vector< GenDecRow > _rows;
 
   private:
 
     void _addValue(DecColValue& val) {
-      if (_rows.size() == 0) { _rows.push_back(std::vector<DecColValue>()); }
-      _rows[_rows.size()-1].push_back(val);
+      if (_rows.size() == 0) {
+        _rows.push_back(GenDecRow());
+      }
+      _rows[_rows.size()-1][val.pField->index] = val;
     }
 
     char tmp[64];
