@@ -17,113 +17,158 @@ class DecTest : public ::testing::Test {
   }
 };
 
-TEST_F(DecTest, smallUnsignedInt) {
-  auto vec = std::vector<uint8_t>(3);
-  vec[0] = 3;
-  vec[1] = TYPE_UINT32;
-  vec[2] = 127;
-
-  auto dl = crow::DecoderLogger();
-  auto &dec = *crow::DecoderNew(vec.data(), vec.size());
-  dec.decode(dl);
-
-  ASSERT_EQ("[ 3] uint32 127,", dl.str());
-
-  delete &dec;
+bool needs_quotes(std::string s)
+{
+  if (s.find(",") != std::string::npos) { return true; }
+  if (s.find('"') != std::string::npos) { return true; }
+  // TODO: escape quotes like CSV
+  return false;
 }
 
-TEST_F(DecTest, u32) {
-  auto vec = std::vector<uint8_t>();
-  // fieldIndex=1, type:uint32_t, value=0x8000FFFF (2147549183)
-  HexStringToVec("0102ffff838008", vec);
-
-  auto dl = crow::DecoderLogger();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
-  pDec->decode(dl);
-
-  ASSERT_EQ("[ 1] uint32 2147549183,", dl.str());
-
-  delete pDec;
-}
-
-TEST_F(DecTest, dub) {
-  auto vec = std::vector<uint8_t>();
-  HexStringToVec("090577be9f1a2fdd5e40", vec);
-
-  auto dl = crow::DecoderLogger();
-  auto &dec = *crow::DecoderNew(vec.data(), vec.size());
-  dec.decode(dl);
-
-  ASSERT_EQ("[ 9] double 123.456,", dl.str());
-
-}
-
-TEST_F(DecTest, withColumnNames) {
-  auto vec = std::vector<uint8_t>();
-  HexStringToVec("00820566697273744d0187067365636f6e641d6e6f20737061636520746f2072656e7420696e207468697320746f776e", vec);
-
-  auto dl = crow::DecoderLogger();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
-  auto &dec = *pDec;
-  dec.decode(dl);
-
-  ASSERT_EQ("[ 0]first uint32 77,[ 1]second \"no space to rent in this town\",", dl.str());
-
-  delete pDec;
-}
-
-TEST_F(DecTest, simple) {
-  // A a = { 47, 65535, "hello", 123.456};
-  auto vec = std::vector<uint8_t>();
-  HexStringToVec("00015e0104ffff0302070568656c6c6f030577be9f1a2fdd5e40", vec);
-
-  auto dl = crow::DecoderLogger();
-  auto &dec = *crow::DecoderNew(vec.data(), vec.size());
-  dec.decode(dl);
-
-  ASSERT_EQ("[ 0] int32 47,[ 1] uint64 65535,[ 2] \"hello\",[ 3] double 123.456,", dl.str());
-
-  //delete &dec;
-}
-
-TEST_F(DecTest, oneFieldAtATime) {
-  // A a = { 47, 65535, "hello", 123.456};
-  auto vec = std::vector<uint8_t>();
-  HexStringToVec("00015e0104ffff0302070568656c6c6f030577be9f1a2fdd5e400009", vec);
-
-  auto dl = crow::DecoderLogger();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
-  auto &dec = *pDec;
-
-  uint32_t lastFieldIndex = 0;
-  int numRows=-1;
-  while (dec.scanRow()) {
-    numRows++;
-    if (lastFieldIndex == 0) lastFieldIndex = dec.getLastFieldIndex();
-    for (uint32_t i=0; i <= lastFieldIndex; i++) {
-      if (!dec.decodeField(i, dl)) {
-        printf("failed to decode field %d\n", i);
-      }
-    }
+std::string quoted(std::string str)
+{
+  int numQuotes = 0;
+  int numCommas = 0;
+  const char *p=str.c_str();
+  const char *end = p + str.length();
+  while (p < end) {
+    if (*p == ',') { numCommas++; }
+    if (*p == '"') { numQuotes++; }
+    p++;
   }
 
-  ASSERT_EQ("[ 0] int32 47,[ 1] uint64 65535,[ 2] \"hello\",[ 3] double 123.456,", dl.str());
+  if (numCommas == 0 && numQuotes == 0) return str;
+  if (numQuotes == 0) return "\"" + str + "\"";
+
+  p=str.c_str();
+  std::string dest(str.length() + numQuotes + 2, ' ');
+  char *d = (char *)dest.c_str();
+  *d++ = '"';
+  while (p < end) {
+    char c = *p++;
+    *d++ = c;
+    if (c == '"') {
+      *d++ = c;
+    }
+  }
+  *d++ = '"';
+
+  return dest;
+}
+
+void BytesToHexString(const std::string &bytes, std::string &dest);
+
+std::string to_csv(std::vector<crow::GenDecRow> &rows)
+{
+  static char tmp[48];
+  std::string s;
+  for (auto &row : rows) {
+    for (auto it = row.begin(); it != row.end(); it++) {
+      auto &col = it->second;
+      if (col.fieldIndex > 0) s += ",";
+      if (col.typeId == CrowType::TSTRING && needs_quotes(col.strval)) {
+        s += quoted(col.strval);
+      } else if (col.typeId == CrowType::TBYTES) {
+        std::string hex;
+        BytesToHexString(col.strval, hex);
+        s += hex;
+      } else {
+        s += col.strval;
+      }
+      //sprintf(tmp, " (type:%d)", col.typeId);
+      //s += tmp;
+    }
+    s += "||";
+  }
+  return s;
+}
+/*
+std::string _typeName(CrowType ft) {
+  switch(ft) {
+    case TINT32: return "int32";
+    case TUINT32: return "uint32";
+    case TINT64: return "int64";
+    case TUINT64: return "uint64";
+    case TFLOAT64: return "double";
+    default:
+      break;
+  }
+  return "";
+}
+*/
+
+TEST_F(DecTest, decodesUsingFieldNames) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("01008100046e616d6505626f222c6201018200036167652e0102890006616374697665010380056a65727279817482000380056c696e646181428201", vec);
+
+  auto dl = crow::GenericDecoderListener();
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto &dec = *pDec;
+  dec.decode(dl);
+  std::string actual = to_csv(dl._rows);
+
+  ASSERT_EQ("\"bo\"\",b\",23,1||jerry,58,0||linda,33,1||", actual);
 
   delete pDec;
 }
+
+TEST_F(DecTest, decodesFloats) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("01000b0266660afbe45ae64101010a3679e9f642038066660afbe45ae6418179e9f642", vec);
+
+  auto dl = crow::GenericDecoderListener();
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto &dec = *pDec;
+  dec.decode(dl);
+  std::string actual = to_csv(dl._rows);
+
+  ASSERT_EQ("3000444888.325,123.456||3000444888.325,123.456||", actual);
+
+  delete pDec;
+}
+
+TEST_F(DecTest, decodesUsingFieldId) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("01000102054c61727279010102362e01020966010380034d6f65817c820003", vec);
+
+  auto dl = crow::GenericDecoderListener();
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto &dec = *pDec;
+  dec.decode(dl);
+  std::string actual = to_csv(dl._rows);
+
+  ASSERT_EQ("Larry,23,1||Moe,62,0||", actual);
+
+  delete pDec;
+}
+
+TEST_F(DecTest, decodesBytes) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("01000c02040badcafe0380040badcafe", vec);
+
+  auto dl = crow::GenericDecoderListener();
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto &dec = *pDec;
+  dec.decode(dl);
+  std::string actual = to_csv(dl._rows);
+
+  ASSERT_EQ("0badcafe||0badcafe||", actual);
+
+  delete pDec;
+}
+
 
 TEST_F(DecTest, empty) {
   auto vec = std::vector<uint8_t>();
 
-  auto dl = crow::DecoderLogger();
+  auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
   pDec->decode(dl);
 
-  ASSERT_EQ("", dl.str());
+  ASSERT_EQ(0, dl._rows.size());
 
   delete pDec;
 }
-
 
 uint8_t hexDigitValue(char c)
 {

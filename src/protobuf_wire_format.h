@@ -72,6 +72,18 @@ inline double DecodeDouble(uint64_t value) {
   return f;
 }
 
+inline uint64_t EncodeFloat(float value) {
+  union {float f; uint32_t i;};
+  f = value;
+  return i;
+}
+
+inline double DecodeFloat(uint32_t value) {
+  union {float f; uint32_t i;};
+  i = value;
+  return f;
+}
+
 /*
  * Additionally, the logic for the following functions are incorporated in crow.cpp:
  * writeVarInt, readVarInt, writeFixed64, readFixed64
