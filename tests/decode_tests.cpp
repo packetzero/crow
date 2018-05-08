@@ -75,6 +75,10 @@ std::string to_csv(std::vector<crow::GenDecRow> &rows)
       } else {
         s += col.strval;
       }
+      if (col.flags > 0) {
+        sprintf(tmp," FLAGS:%x", col.flags);
+        s += tmp;
+      }
       //sprintf(tmp, " (type:%d)", col.typeId);
       //s += tmp;
     }
@@ -157,6 +161,35 @@ TEST_F(DecTest, decodesBytes) {
   delete pDec;
 }
 
+TEST_F(DecTest, decodesFlags) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("010003020303168004038005", vec);
+
+  auto dl = crow::GenericDecoderListener();
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto &dec = *pDec;
+  dec.decode(dl);
+  std::string actual = to_csv(dl._rows);
+
+  ASSERT_EQ("3||4 FLAGS:1||5||", actual);
+
+  delete pDec;
+}
+
+TEST_F(DecTest, decodesSet) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("01000102054c617272791101023611020966040004812e820105000380034d6f653500", vec);
+
+  auto dl = crow::GenericDecoderListener();
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto &dec = *pDec;
+  dec.decode(dl);
+  std::string actual = to_csv(dl._rows);
+
+  ASSERT_EQ("Larry,23,1||Moe,23,1||", actual);
+
+  delete pDec;
+}
 
 TEST_F(DecTest, empty) {
   auto vec = std::vector<uint8_t>();

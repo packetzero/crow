@@ -36,6 +36,20 @@ namespace crow {
   };
 
 
+  struct PData
+  {
+    const uint8_t*  start;
+    const uint8_t*  ptr;
+    const uint8_t*  end;
+    size_t          length;
+
+    size_t remaining() { return (size_t)(end - ptr); }
+    bool empty() { return (ptr >= end); }
+
+    PData(const uint8_t* p, size_t len) : start(p), ptr(p), end(p + len), length(len) { }
+
+  };
+
   /*
    * Implementation of Decoder
    */
@@ -44,9 +58,9 @@ namespace crow {
     /*
      * DecoderImpl constructor
      */
-    DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _ptr(pEncData),
-      _end(pEncData + encLength), _fields(), _err(0), _typemask(0L),
-      _errOffset(0L), _setId(0L), _mapSets(), _fieldIndexAdd(0), _byteCount(encLength) {
+    DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _data(pEncData, encLength), _fields(), _err(0), _typemask(0L),
+      _errOffset(0L), _setId(0L), _mapSets(),
+      _byteCount(encLength), _flags(0) {
     }
 
     ~DecoderImpl() {
@@ -80,88 +94,121 @@ namespace crow {
 */
 
     bool decodeRow(DecoderListener &listener) override {
+      return _doDecodeRow(listener, _data);
+    }
 
+    bool _doDecodeRow(DecoderListener &listener, PData &data) {
       while (true) {
 
-        uint8_t tagid;
-        if (NONE_LEFT(_ptr)) { _markError(ENOSPC, _ptr); return true; }
-        tagid = *_ptr++;
+        uint8_t tagbyte;
+        if (data.empty()) { _markError(ENOSPC, data); return true; }
+        tagbyte = *data.ptr++;
+        bool isIndex = (tagbyte & UPPER_BIT) != 0;
+        uint8_t tagid = tagbyte & 0x0F;
 
-        if ((tagid & UPPER_BIT) != 0) {
+        if (isIndex) {
 
           uint8_t index = tagid & (uint8_t)0x7F;
           if (index >= _fields.size()) {
-            _markError(EINVAL, _ptr); return true;
+            _markError(EINVAL, data); return true;
           }
           const Field* pField = &_fields[index];
 
-          if (_decodeValue(pField, _ptr, listener)) {
+          if (_decodeValue(pField, data, listener)) {
             break;
           }
 
         } else if (tagid == TROWSEP) {
+          _flags = (tagbyte >> 4) & 0x07;
           listener.onRowSep();
           break;
-        } else if (tagid == TFIELDINFO) {
-          const Field* pField = _decodeFieldInfo(_ptr);
-          if (pField == 0L) {
-            _markError(ENOSPC, _ptr); return true;
+
+        } else if (tagid == TFLAGS) {
+
+          _flags = (tagbyte >> 4) & 0x07;
+
+        } else if (tagid == TSET) {
+
+          if (data.empty()) { _markError(ENOSPC, data); return true; }
+          uint8_t setid = *data.ptr++;
+
+          auto setlen = readVarInt(data);
+          if (setlen == 0 || setlen > MAX_SANE_SET_SIZE) {
+            _markError(ENOSPC, data); return true;
           }
-          if (_decodeValue(pField, _ptr, listener)) {
+
+          /* const SetContext* pContext = */ _putSet(setid, data.ptr, setlen);
+          data.ptr += setlen;
+
+        } else if (tagid == TSETREF) {
+
+          uint8_t setId = *data.ptr++;
+          const SetContext* pContext = _getSet(setId);
+          if (pContext == 0L) {
+            _markError(ESPIPE, data);
+          } else {
+            _byteCount += pContext->size();
+          }
+          PData setData(pContext->data(), pContext->size());
+          _doDecodeRow(listener, setData);
+
+        } else if (tagid == TFIELDINFO) {
+
+          bool hasNoValue = (tagbyte & TAGBYTE_FIELDINFO_NO_VALUE) == TAGBYTE_FIELDINFO_NO_VALUE;
+          const Field* pField = _decodeFieldInfo(data);
+          if (pField == 0L) {
+            _markError(ENOSPC, data); return true;
+          }
+          if (hasNoValue || _decodeValue(pField, data, listener)) {
             break;
           }
         } else {
-          _markError(EINVAL, _ptr); return true;
+          _markError(EINVAL, data); return true;
         }
 
-
-        // TODO: field modifiers for sets
-        //if (_fieldIndexAdd != 0) {
-        //  fieldIndex |= _fieldIndexAdd;
-        //}
       }
       return false;
     }
 
-    const Field* _decodeFieldInfo(const uint8_t* &ptr) {
-      if ((_end-ptr) < 2) {
-        _markError(ENOSPC, ptr);
+    const Field* _decodeFieldInfo(PData &data) {
+      if (data.remaining() < 2) {
+        _markError(ENOSPC, data);
         return 0L;
       }
-      uint8_t index = *ptr++;
+      uint8_t index = *data.ptr++;
       bool has_subid = (index & UPPER_BIT) != 0;
       index = index & 0x7F;
 
       // indexes should decode in-order
       if (index != _fields.size()) {
-        _markError(EINVAL, ptr);
+        _markError(EINVAL, data);
         return 0L;
       }
 
-      uint8_t typeId = *ptr++;
+      uint8_t typeId = *data.ptr++;
       bool has_name = (typeId & UPPER_BIT) != 0;
       typeId = typeId & 0x7F;
 
       // TODO : check valid typeid
 
-      uint32_t id = readVarInt(ptr);
+      uint32_t id = readVarInt(data);
       uint32_t subid = 0;
       std::string name = std::string();
 
       // TODO: check err
 
       if (has_subid) {
-        subid = readVarInt(ptr);
+        subid = readVarInt(data);
       }
       if (has_name) {
-        size_t namelen = readVarInt(ptr);
+        size_t namelen = readVarInt(data);
         if (namelen > MAX_NAME_LEN) {
-          _markError(EINVAL, ptr);
+          _markError(EINVAL, data);
           return 0L;
         }
         // read name bytes
-        name = std::string(reinterpret_cast<char const*>(ptr), namelen);
-        ptr += namelen;
+        name = std::string(reinterpret_cast<char const*>(data.ptr), namelen);
+        data.ptr += namelen;
       }
       // TODO: check err
 
@@ -190,188 +237,156 @@ namespace crow {
 
   private:
 
-    bool _decodeValue(const Field *pField, const uint8_t* &ptr, DecoderListener &listener) {
-      if (NONE_LEFT(ptr)) { _markError(ENOSPC, ptr); return true; }
+    bool _decodeValue(const Field *pField, PData &data, DecoderListener &listener) {
+      if (data.empty()) { _markError(ENOSPC, data); return true; }
 
       switch(pField->typeId) {
         case TINT32: {
-          uint64_t tmp = readVarInt(ptr);
+          uint64_t tmp = readVarInt(data);
           int32_t val = ZigZagDecode32((uint32_t)tmp);
-          listener.onField(pField, val);
+          listener.onField(pField, val, _flags);
         }
         break;
 
         case TUINT32: {
-          uint64_t tmp = readVarInt(ptr);
+          uint64_t tmp = readVarInt(data);
           uint32_t val = (uint32_t)tmp;
-          listener.onField(pField, val);
+          listener.onField(pField, val, _flags);
         }
         break;
 
         case TINT64: {
-          uint64_t tmp = readVarInt(ptr);
+          uint64_t tmp = readVarInt(data);
           int64_t val = ZigZagDecode64(tmp);
-          listener.onField(pField, val);
+          listener.onField(pField, val, _flags);
         }
         break;
 
         case TUINT64: {
-          uint64_t val = readVarInt(ptr);
-          listener.onField(pField, val);
+          uint64_t val = readVarInt(data);
+          listener.onField(pField, val, _flags);
         }
         break;
 
         case TFLOAT64: {
-          uint64_t tmp = readFixed64(ptr);
+          uint64_t tmp = readFixed64(data);
           double val = DecodeDouble(tmp);
-          listener.onField(pField, val);
+          listener.onField(pField, val, _flags);
         }
         break;
 
         case TFLOAT32: {
-          uint64_t tmp = readFixed32(ptr);
+          uint64_t tmp = readFixed32(data);
           double val = DecodeFloat(tmp);
-          listener.onField(pField, val);
+          listener.onField(pField, val, _flags);
         }
         break;
 
         case TUINT8: {
-          uint8_t val = *ptr++;
-          listener.onField(pField, val);
+          uint8_t val = *data.ptr++;
+          listener.onField(pField, val, _flags);
         }
         break;
 
         case TINT8: {
-          uint8_t val = *ptr++;
-          listener.onField(pField, (int8_t)val);
+          uint8_t val = *data.ptr++;
+          listener.onField(pField, (int8_t)val, _flags);
         }
         break;
 
         case TSTRING: {
-          uint64_t len = readVarInt(ptr);
-          if ((_end-ptr) < len) {
-            _markError(ENOSPC, ptr);
+          uint64_t len = readVarInt(data);
+          if (data.remaining() < len) {
+            _markError(ENOSPC, data);
             break;
           }
-          std::string s(reinterpret_cast<char const*>(ptr), (size_t)len);
-          ptr += len;
-          listener.onField(pField, s);
+          std::string s(reinterpret_cast<char const*>(data.ptr), (size_t)len);
+          data.ptr += len;
+          listener.onField(pField, s, _flags);
         }
         break;
 
         case TBYTES: {
-          uint64_t len = readVarInt(ptr);
-          if ((_end-ptr) < len) {
-            _markError(ENOSPC, ptr);
+          uint64_t len = readVarInt(data);
+          if (data.remaining() < len) {
+            _markError(ENOSPC, data);
             break;
           }
           auto vec = std::vector<uint8_t>();
           vec.resize(len);
-          memcpy(vec.data(), ptr, (size_t)len);
-          ptr += len;
-          listener.onField(pField, vec);
-        }
-        break;
-/*
-        case TYPE_SET: {
-          uint64_t setId = readVarInt(ptr);
-          uint64_t len = readVarInt(ptr);
-          if ((_end-ptr) < len) {
-            _markError(ENOSPC, ptr);
-            break;
-          }
-          const SetContext* pContext = _putSet(setId, ptr, len);
-          ptr += len;
-          if (pContext != 0L) {
-            auto setDecoder = DecoderImpl(pContext->data(), pContext->size());
-            setDecoder.setFieldIndexAdd(fieldIndex);
-            setDecoder.decode(listener, setId);
-          }
+          memcpy(vec.data(), data.ptr, (size_t)len);
+          data.ptr += len;
+          listener.onField(pField, vec, _flags);
         }
         break;
 
-        case TYPE_SETREF: {
-          uint64_t setId = readVarInt(ptr);
-          const SetContext* pContext = _getSet(setId);
-          if (pContext == 0L) {
-            _markError(ESPIPE, ptr);
-          } else {
-            _byteCount += pContext->size();
-            auto setDecoder = DecoderImpl(pContext->data(), pContext->size());
-            setDecoder.setFieldIndexAdd(fieldIndex);
-            setDecoder.decode(listener, setId);
-          }
-        }
-        break;
-*/
         default:
           break;
       }
       return false;
     }
-/*
-    const SetContext* _putSet(uint64_t setId, const uint8_t* ptr, size_t len)
+
+    const SetContext* _putSet(uint8_t setId, const uint8_t* ptr, size_t len)
     {
       auto pContext = new SetContext(setId, ptr, len);
       _mapSets[setId] = pContext;
       return pContext;
     }
 
-    const SetContext* _getSet(uint64_t setId)
+    const SetContext* _getSet(uint8_t setId)
     {
       auto fit = _mapSets.find(setId);
       if (fit == _mapSets.end()) return 0L;
       return fit->second;
     }
-*/
-    void _markError(int errCode, const uint8_t* ptr) {
+
+    void _markError(int errCode, PData &data) {
       if (_err == 0) return;
       _err = errCode;
-      _errOffset = (ptr - _ptr);
-      ptr = _end;
+      _errOffset = (data.ptr - data.start);
+      data.ptr = data.end;
     }
 
-    uint64_t readFixed64(const uint8_t* &ptr)
+    uint64_t readFixed64(PData &data)
     {
-      if ((_end - ptr) < sizeof(uint64_t)) {
-        _markError(ENOSPC, ptr);
+      if (data.remaining() < sizeof(uint64_t)) {
+        _markError(ENOSPC, data);
         return 0L;
       }
-      uint64_t val = *((uint64_t*)ptr);
-      ptr += sizeof(val);
+      uint64_t val = *((uint64_t*)data.ptr);
+      data.ptr += sizeof(val);
       return val;
     }
 
-    uint64_t readFixed32(const uint8_t* &ptr)
+    uint64_t readFixed32(PData &data)
     {
-      if ((_end - ptr) < sizeof(uint32_t)) {
-        _markError(ENOSPC, ptr);
+      if (data.remaining() < sizeof(uint32_t)) {
+        _markError(ENOSPC, data);
         return 0L;
       }
-      uint32_t val = *((uint32_t*)ptr);
-      ptr += sizeof(val);
+      uint32_t val = *((uint32_t*)data.ptr);
+      data.ptr += sizeof(val);
       return val;
     }
 
     //void setFieldIndexAdd(uint32_t value) override { _fieldIndexAdd = value; }
 
-    const uint8_t* _ptr;
-    const uint8_t* _end;
+    PData _data;
     std::vector<Field> _fields;
     int            _err;
     uint64_t       _typemask;
     uint64_t       _errOffset;
     uint64_t       _setId;
     std::map<uint64_t, SetContext*> _mapSets;
-    uint32_t       _fieldIndexAdd;
     size_t         _byteCount;
+    uint8_t        _flags;
 
-    uint64_t readVarInt(const uint8_t* &ptr) {
+    uint64_t readVarInt(PData &data) {
       uint64_t value = 0L;
       uint64_t shift = 0L;
 
-      while (BYTES_REMAIN(ptr)) {
-        uint8_t b = *ptr++;
+      while (!data.empty()) {
+        uint8_t b = *data.ptr++;
         value |= ((uint64_t)(b & 0x07F)) << shift;
         shift += 7;
         if ((b >> 7) == 0) break;
@@ -506,80 +521,6 @@ namespace crow {
     void putRowSep() override {
       *(_stack.Push(1)) = TROWSEP;
     }
-
-    /**
-     * @brief Places a set of fields that can be referenced rather than placed in-line
-     * for future occurances.
-     *
-     * A 'setref' is a set of field values that can be referenced,
-     * rather than being placed in-line.  Wide tables in a non-relational
-     * databases result in repetitive data.  By using setref during the encoding
-     * process, the stored data is more compact, while being transparent to the
-     * application receiving the decoded data.
-     *
-     * NOTE: A set cannot include any setrefs.
-     *
-     * For example, a table of People may contains fields for
-     * Company (company_name, company_category, etc) and
-     * Location (country_code, city_name, geo_lat, geo_long, zipcode, etc).  By
-     * using setrefs, the encoding saves space if the same company and location
-     * data occurs more than once.
-     *
-     * @param setId An ID used by encoding application for get/put.
-     *
-     * @return true on error, false on success.
-     */
-     /*
-    bool putSet(uint64_t appSetId, Encoder& encForSet, uint32_t fieldIndexAdd) override {
-
-      // sanity check to make sure we haven't already encountered setId
-
-      auto fit = _mapSets.find(appSetId);
-      if (fit != _mapSets.end()) return true;
-
-      if (encForSet.size() == 0 || encForSet.size() > MAX_SANE_SET_SIZE) return true;
-
-      uint64_t setId = _setIdCounter++;
-
-      writeTag(fieldIndexAdd, TYPE_SET);
-      writeVarInt(setId);
-      writeVarInt(encForSet.size());
-
-      // Make sure data is valid and contains no SET or SETREF or ROWSEP
-
-      DecoderImpl decTest = DecoderImpl(encForSet.data(), encForSet.size());
-      auto emptyListener = DecoderListener();
-      decTest.decode(emptyListener);
-      if (decTest.getErrCode() != 0 || (decTest.getTypeMask() & (TYPE_MASK_SET | TYPE_MASK_SETREF | TYPE_MASK_ROWSEP))) {
-        return true;
-      }
-
-      // place data
-
-      memcpy(_stack.Push(encForSet.size()), encForSet.data(), encForSet.size());
-
-      // update map
-
-      _mapSets[appSetId] = setId;
-
-      return false;
-    }*/
-
-    /**
-     * @brief If found (previous call to putSet(setId) was made), places SETREF.
-     *
-     * @returns true on error, false on success.
-     */
-     /*
-    bool putSetRef(uint64_t appSetId, uint32_t fieldIndexAdd) override {
-      auto fit = _mapSets.find(appSetId);
-      if (fit == _mapSets.end()) return true;
-
-      writeTag(fieldIndexAdd, TYPE_SETREF);
-      writeVarInt(fit->second);
-
-      return false;
-    }*/
 
     const uint8_t* data() const override { return _stack.Bottom(); }
 

@@ -10,11 +10,25 @@ enum CrowTag {
     TFIELDINFO,      // 1
     TBLOCK,          // 2
     TROWSEP,         // 3
-    TSET,            // 6
-    TSETREF,         // 7
+    TSET,            // 4
+    TSETREF,         // 5
+    TFLAGS,          // 6
 
     NUMTAGS
 };
+
+/*
+  the tagid byte has following scenarios:
+
+  1nnn nnnn    Upper bit set - lower 7 bits contain index of field, value bytes follow
+  000F 0001    TFIELDINFO, if bit 4 set, no value follows definition
+  0FFF 0110    TFLAGS, bits 4-6 contain app specific flags
+  0FFF 0011    TROWSEP, bits 4-6 contain app specific flags
+  0FFF 0101    TSETREF, bits 4-6 contain app specific flags
+  0000 TTTT    Tagid in bits 0-3
+*/
+
+#define TAGBYTE_FIELDINFO_NO_VALUE (uint8_t)0x10
 
 enum CrowType {
     NONE,
@@ -137,13 +151,13 @@ namespace crow {
 
   class DecoderListener {
   public:
-    virtual void onField(const Field *pField, int32_t value) {}
-    virtual void onField(const Field *pField, uint32_t value) {}
-    virtual void onField(const Field *pField, int64_t value) {}
-    virtual void onField(const Field *pField, uint64_t value) {}
-    virtual void onField(const Field *pField, double value) {}
-    virtual void onField(const Field *pField, const std::string &value) {}
-    virtual void onField(const Field *pField, const std::vector<uint8_t> value) {}
+    virtual void onField(const Field *pField, int32_t value, uint8_t flags) {}
+    virtual void onField(const Field *pField, uint32_t value, uint8_t flags) {}
+    virtual void onField(const Field *pField, int64_t value, uint8_t flags) {}
+    virtual void onField(const Field *pField, uint64_t value, uint8_t flags) {}
+    virtual void onField(const Field *pField, double value, uint8_t flags) {}
+    virtual void onField(const Field *pField, const std::string &value, uint8_t flags) {}
+    virtual void onField(const Field *pField, const std::vector<uint8_t> value, uint8_t flags) {}
     virtual void onRowSep() {}
   };
 
@@ -195,7 +209,7 @@ namespace crow {
   struct DecColValue {
     uint8_t fieldIndex;
     CrowType typeId;
-    uint64_t setId;
+    uint8_t flags;
     union {
       int32_t i32val;
       uint32_t u32val;
@@ -207,10 +221,10 @@ namespace crow {
     };
     std::string strval;
 
-    DecColValue() : fieldIndex(0), typeId(CrowType::NONE), setId(0), i64val(0), strval() {}
+    DecColValue() : fieldIndex(0), typeId(CrowType::NONE), flags(0), i64val(0), strval() {}
 
-    DecColValue(uint8_t idx, CrowType typ, std::string sval) : fieldIndex(idx), typeId(typ),
-      setId(0L), u64val(0), strval(sval) {
+    DecColValue(uint8_t idx, CrowType typ, std::string sval, uint8_t flgs) : fieldIndex(idx), typeId(typ),
+      flags(flgs), u64val(0), strval(sval) {
     }
   };
 
@@ -221,42 +235,42 @@ namespace crow {
 
     GenericDecoderListener() : _rows(), _rownum(0) {
     }
-    void onField(const Field *pField, int32_t value) override {
+    void onField(const Field *pField, int32_t value, uint8_t flags) override {
       sprintf(tmp,"%d", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
       v.i32val = value;
       _addValue(v);
     }
-    void onField(const Field *pField, uint32_t value) override {
+    void onField(const Field *pField, uint32_t value, uint8_t flags) override {
       sprintf(tmp,"%u", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
       v.u32val = value;
       _addValue(v);
     }
-    void onField(const Field *pField, int64_t value) override {
+    void onField(const Field *pField, int64_t value, uint8_t flags) override {
       sprintf(tmp,"%lld", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
       v.i64val = value;
       _addValue(v);
     }
-    void onField(const Field *pField, uint64_t value) override {
+    void onField(const Field *pField, uint64_t value, uint8_t flags) override {
       sprintf(tmp,"%llu", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
       v.u64val = value;
       _addValue(v);
     }
-    void onField(const Field *pField, double value) override {
+    void onField(const Field *pField, double value, uint8_t flags) override {
       sprintf(tmp,"%.3f", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp));
+      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
       v.dval = value;
       _addValue(v);
     }
-    void onField(const Field *pField, const std::string &value) override {
-      auto v = DecColValue(pField->index, pField->typeId, value);
+    void onField(const Field *pField, const std::string &value, uint8_t flags) override {
+      auto v = DecColValue(pField->index, pField->typeId, value, flags);
       _addValue(v);
     }
-    void onField(const Field *pField, const std::vector<uint8_t> value) override {
-      auto v = DecColValue(pField->index, pField->typeId, "");
+    void onField(const Field *pField, const std::vector<uint8_t> value, uint8_t flags) override {
+      auto v = DecColValue(pField->index, pField->typeId, "", flags);
       v.strval.assign((const char *)value.data(), value.size());
       _addValue(v);
     }
