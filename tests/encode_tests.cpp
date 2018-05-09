@@ -27,19 +27,30 @@ TEST_F(EncTest, withColumnNames) {
 
   std::string s = "";
 
-  PUT_NAME(pEnc, "name", "bob");     s += "41000100046e616d6503626f62";
-  PUT_NAME(pEnc, "age", 23);         s += "41010200036167652e";
-  PUT_NAME(pEnc, "active", true);    s += "410209000661637469766501";
+  // subscripts
+
+  enc["name"] = "bob";         s += "41000100046e616d6503626f62";
+  enc["age"] = 23;             s += "41010200036167652e";
+  enc["active"] = true;        s += "410209000661637469766501";
+
+  // put functions
+
+  //  pEnc->put("bob", "name");     s += "41000100046e616d6503626f62";
+  //  pEnc->put(23, "age");         s += "41010200036167652e";
+  //  pEnc->put(true, "active");    s += "410209000661637469766501";
+
   enc.putRowSep();                   s += "03";
 
-  PUT_NAME(pEnc, "name","jerry");    s += "80056a65727279";
-  PUT_NAME(pEnc, "age", 58) ;        s += "8174";
-  PUT_NAME(pEnc, "active", false);   s += "8200";
+  // macros
+
+  enc["name"] = "jerry";    s += "80056a65727279";
+  enc["age"] = 58 ;        s += "8174";
+  enc["active"] = false;   s += "8200";
   enc.putRowSep();                   s += "03";
 
-  PUT_NAME(pEnc, "name", "linda");   s += "80056c696e6461";
-  PUT_NAME(pEnc, "age", 33) ;        s += "8142";
-  PUT_NAME(pEnc, "active", true);    s += "8201";
+  enc["name"] = "linda";   s += "80056c696e6461";
+  enc["age"] = 33 ;        s += "8142";
+  enc["active"] = true;    s += "8201";
 
   const uint8_t* result = enc.data();
 
@@ -61,13 +72,13 @@ TEST_F(EncTest, encodeFloats)
   std::string s = "";
 
   // 0b typeid : Float64
-  PUT_ID(pEnc, MY_FIELD_A, 3000444888.325);  s += "01000b0266660afbe45ae641";
+  enc[MY_FIELD_A] = 3000444888.325;  s += "01000b0266660afbe45ae641";
   // 0a # typeid : Float32
-  PUT_ID(pEnc, MY_FIELD_B, (float)123.456);         s += "01010a3679e9f642";
+  enc[MY_FIELD_B] = (float)123.456;         s += "01010a3679e9f642";
   enc.putRowSep();                           s += "03";
 
-  PUT_ID(pEnc, MY_FIELD_A, 3000444888.325);  s += "8066660afbe45ae641";
-  PUT_ID(pEnc, MY_FIELD_B, (float)123.456);  s += "8179e9f642";
+  enc[MY_FIELD_A] = 3000444888.325;  s += "8066660afbe45ae641";
+  enc[MY_FIELD_B] = (float)123.456;  s += "8179e9f642";
 
   const uint8_t* result = enc.data();
 
@@ -89,14 +100,15 @@ TEST_F(EncTest, encodesUsingFieldId)
 
   std::string s = "";
 
-  PUT_ID(pEnc, MY_FIELD_A, "Larry");  s += "01000102054c61727279";
-  PUT_ID(pEnc, MY_FIELD_B, 23);       s += "010102362e";
-  PUT_ID(pEnc, MY_FIELD_C, true);     s += "0102096601";
+  enc[MY_FIELD_A] = "Larry";  s += "01000102054c61727279";
+  enc[MY_FIELD_B] = 23;       s += "010102362e";
+  enc[MY_FIELD_C] = true;     s += "0102096601";
+
   enc.putRowSep();                    s += "03";
 
-  PUT_ID(pEnc, MY_FIELD_A, "Moe");    s += "80034d6f65";
-  PUT_ID(pEnc, MY_FIELD_B, 62);       s += "817c";
-  PUT_ID(pEnc, MY_FIELD_C, false);    s += "8200";
+  pEnc->put("Moe",MY_FIELD_A);        s += "80034d6f65";
+  enc[MY_FIELD_B] = 62;       s += "817c";
+  enc[MY_FIELD_C] = false;    s += "8200";
   enc.putRowSep();                    s += "03";
 
   const uint8_t* result = enc.data();
@@ -122,14 +134,14 @@ TEST_F(EncTest, encodesOutOfOrder)
   //first row sets index order
   // each use TFIELDINFO followed by value
 
-  PUT_ID(pEnc, MY_FIELD_A, "Larry");  s += "01000102054c61727279";
-  PUT_ID(pEnc, MY_FIELD_B, 23);       s += "010102362e";
-  PUT_ID(pEnc, MY_FIELD_C, true);     s += "0102096601";
+  enc[MY_FIELD_A] = "Larry";  s += "01000102054c61727279";
+  enc[MY_FIELD_B] = 23;       s += "010102362e";
+  enc[MY_FIELD_C] = true;     s += "0102096601";
   enc.putRowSep();                    s += "03";
 
-  PUT_ID(pEnc, MY_FIELD_C, false);    s += "8200";
-  PUT_ID(pEnc, MY_FIELD_B, 62);       s += "817c";
-  PUT_ID(pEnc, MY_FIELD_A, "Moe");    s += "80034d6f65";
+  enc[MY_FIELD_C] = false;    s += "8200";
+  enc[MY_FIELD_B] = 62;       s += "817c";
+  enc[MY_FIELD_A] = "Moe";    s += "80034d6f65";
   enc.putRowSep();                    s += "03";
 
   const uint8_t* result = enc.data();
@@ -151,18 +163,18 @@ TEST_F(EncTest, encodesSparse)
 
   std::string s = "";
 
-  PUT_ID(pEnc, MY_FIELD_A, "Larry");  s += "01000102054c61727279";
-  PUT_ID(pEnc, MY_FIELD_B, 23);       s += "010102362e";
+  enc[MY_FIELD_A] = "Larry";  s += "01000102054c61727279";
+  enc[MY_FIELD_B] = 23;       s += "010102362e";
   enc.putRowSep();                    s += "03";
 
-  PUT_ID(pEnc, MY_FIELD_C, true);     s += "0102096601";
+  enc[MY_FIELD_C] = true;     s += "0102096601";
   enc.putRowSep();                    s += "03";
 
-  PUT_ID(pEnc, MY_FIELD_A, "Moe");    s += "80034d6f65";
+  enc[MY_FIELD_A] = "Moe";    s += "80034d6f65";
   enc.putRowSep();                    s += "03";
 
-  PUT_ID(pEnc, MY_FIELD_B, 62);       s += "817c";
-  PUT_ID(pEnc, MY_FIELD_C, false);    s += "8200";
+  enc[MY_FIELD_B] = 62;       s += "817c";
+  enc[MY_FIELD_C] = false;    s += "8200";
 
   const uint8_t* result = enc.data();
 
@@ -183,17 +195,17 @@ TEST_F(EncTest, encodesSet)
 
   std::string s = "";
 
-  PUT_ID(pEnc, MY_FIELD_A, "Larry");  s += "01000102054c61727279";
+  enc[MY_FIELD_A] = "Larry";  s += "01000102054c61727279";
 
   pEnc->startSet();
-  PUT_ID(pEnc, MY_FIELD_B, 23);       s += "11010236";
-  PUT_ID(pEnc, MY_FIELD_C, true);     s += "11020966";
+  enc[MY_FIELD_B] = 23;       s += "11010236";
+  enc[MY_FIELD_C] = true;     s += "11020966";
   auto setId = pEnc->endSet();       s += "040004812e8201";
 
   pEnc->putSetRef(setId);                s += "0500";
   enc.putRowSep();                    s += "03";
 
-  PUT_ID(pEnc, MY_FIELD_A, "Moe");    s += "80034d6f65";
+  enc[MY_FIELD_A] = "Moe";    s += "80034d6f65";
   pEnc->putSetRef(setId,0x03);                s += "3500";
 
   const uint8_t* result = enc.data();

@@ -53,16 +53,7 @@ enum CrowType {
 
 typedef std::vector<uint8_t> Bytes;
 
-#define PUT_ID(ENC,ID,VAL) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),ID),VAL)
-#define PUT_ID2(ENC,ID,SUBID,VAL) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),ID,SUBID),VAL)
-#define PUT_NAME(ENC,NAME,VAL) (ENC)->put( (ENC)->fieldFor(crow::type_for(VAL),NAME), VAL)
-
-#define PUT_ID_PTR(ENC,ID,VAL,LEN) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),ID),VAL,LEN)
-#define PUT_ID2_PTR(ENC,ID,SUBID,VAL,LEN) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),ID,SUBID),VAL,LEN)
-#define PUT_NAME_PTR(ENC,NAME,VAL,LEN) (ENC)->put((ENC)->fieldFor(crow::type_for(VAL),NAME),VAL,LEN)
-
 namespace crow {
-
   class Field {
   public:
     CrowType    typeId;
@@ -88,11 +79,15 @@ namespace crow {
   inline CrowType type_for(bool val) { return TUINT8; }
   inline CrowType type_for(const char * val) { return TSTRING; }
   inline CrowType type_for(const uint8_t * val) { return TBYTES; }
+  inline CrowType type_for(const std::vector<uint8_t>& value) { return TBYTES; }
 
   class Encoder {
   public:
     virtual Field *fieldFor(CrowType type, uint32_t id, uint32_t subid = 0) = 0;
     virtual Field *fieldFor(CrowType type, std::string name) = 0;
+    inline Field *fieldFor(CrowType type, uint32_t id, uint32_t subid, std::string name) {
+      return (id > 0 ? fieldFor(type, id, subid) : fieldFor(type, name));
+    }
 
     virtual void put(const Field *pField, int32_t value) = 0;
     virtual void put(const Field *pField, uint32_t value) = 0;
@@ -110,7 +105,169 @@ namespace crow {
     virtual void put(const Field *pField, const uint8_t* bytes, size_t len) = 0;
     virtual void put(const Field *pField, bool value) = 0;
 
+    struct EncFieldId {
+    public:
+      EncFieldId(Encoder* _pEnc, uint32_t _id, uint32_t _subid = 0) : id(_id), subid(_subid), name(), pEnc(_pEnc) {}
+      EncFieldId(Encoder* _pEnc, std::string _name) : id(0), subid(0), name(_name), pEnc(_pEnc) {}
+
+      void operator=(bool value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), (uint8_t)(value ? 1 : 0));
+      }
+
+      void operator=(uint32_t value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(int32_t value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(uint64_t value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(int64_t value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(uint16_t value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(int16_t value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(uint8_t value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(int8_t value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(double value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(float value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(const std::string value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(const char* value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      void operator=(const std::vector<uint8_t>& value) {
+        pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
+      }
+      uint32_t id;
+      uint32_t subid;
+      std::string name;
+      Encoder* pEnc;
+    };
+
+    EncFieldId operator[] (uint32_t id) {
+      return EncFieldId(this, id);
+    }
+    EncFieldId operator[] (int id) {
+      return EncFieldId(this, (uint32_t)id);
+    }
+    EncFieldId operator[] (std::string name) {
+      return EncFieldId(this, name);
+    }
+    EncFieldId operator[] (uint64_t id_and_subid) {
+      uint32_t id = id_and_subid & 0x0FFFFFFFFL;
+      uint32_t subid = (id_and_subid >> 32) & 0x0FFFFFFFFL;
+      return EncFieldId(this, id, subid);
+    }
+
+    inline void put(int32_t value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(uint32_t value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(int64_t value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(uint64_t value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(int8_t value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(uint8_t value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(int16_t value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(uint16_t value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(double value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(float value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(const std::string value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+    inline void put(const char* str, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(str), id, subid), str);
+    }
+    inline void put(const std::vector<uint8_t>& value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(TBYTES, id, subid), value);
+    }
+    inline void put(const uint8_t* bytes, size_t len, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(TBYTES, id, subid), bytes, len);
+    }
+    inline void put(bool value, uint32_t id, uint32_t subid = 0) {
+      put(fieldFor(crow::type_for(value), id, subid), value);
+    }
+
+    inline void put(int32_t value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(uint32_t value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(int64_t value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(uint64_t value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(int8_t value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(uint8_t value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(int16_t value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(uint16_t value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(double value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(float value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(const std::string value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+    inline void put(const char* str, const std::string name) {
+      put(fieldFor(crow::type_for(str), name), str);
+    }
+    inline void put(const std::vector<uint8_t>& value, const std::string name) {
+      put(fieldFor(TBYTES, name), value);
+    }
+    inline void put(const uint8_t* bytes, size_t len, const std::string name) {
+      put(fieldFor(TBYTES, name), bytes, len);
+    }
+    inline void put(bool value, const std::string name) {
+      put(fieldFor(crow::type_for(value), name), value);
+    }
+
     virtual void putRowSep() = 0;
+    inline void endRow() { putRowSep(); }
 
     /**
      * @brief Places a set of fields that can be referenced rather than placed in-line

@@ -7,14 +7,26 @@ One of the challenges with libprotobuf, is the need to compile definitions.  Par
 is due to the encoding of WireFormat (varint,length-delimited,etc) rather than FieldType
 (uint32, int64,double,string).
 
-### Encoding Example
+### Encoding Example - Named fields
 
 ```
 auto pEnc = crow::EncoderNew();
-PUT_NAME(pEnc, "Name", "bob");
-PUT_NAME(pEnc, "Age", 23);
-PUT_NAME(pEnc, "Active", true);
-enc.putRowSep();
+auto &enc = *pEnc;
+enc["Name"] = "Bob";
+enc["Age"] = 23;
+enc["Active"] = true;
+enc.endRow();
+
+const uint8_t* output = enc.data();  // enc.size() bytes
+```
+
+### Encoding Example - Fields with IDs
+
+```
+enc[8002] = "Bob";
+enc[8044] = 23;
+enc[SomeFieldId] = true;
+enc.endRow();
 
 const uint8_t* output = enc.data();  // enc.size() bytes
 ```
