@@ -277,8 +277,11 @@ namespace crow {
       put(fieldFor(crow::type_for(value), name), value);
     }
 
-    virtual void putRowSep() = 0;
-    inline void endRow() { putRowSep(); }
+    virtual void putRowSep(uint8_t flags = 0) = 0;
+
+    inline void endRow(uint8_t flags = 0) { putRowSep(flags); }
+
+    virtual void setFlags(uint8_t flags) = 0;
 
     /**
      * @brief Places a set of fields that can be referenced rather than placed in-line

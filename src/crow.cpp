@@ -522,8 +522,12 @@ namespace crow {
       writeVarInt(value, staq());
     }
 
-    void putRowSep() override {
-      *(_stack.Push(1)) = TROWSEP;
+    void putRowSep(uint8_t flags) override {
+      *(_stack.Push(1)) = TROWSEP | ((flags & 0x07) << 4);
+    }
+
+    void setFlags(uint8_t flags) override {
+      *(_stack.Push(1)) = TFLAGS | ((flags & 0x07) << 4);
     }
 
     virtual void    putSetRef(uint8_t setId, uint8_t flags = 0) override {
