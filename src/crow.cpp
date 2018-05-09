@@ -404,7 +404,7 @@ namespace crow {
 
   class EncoderImpl : public Encoder {
   public:
-    EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity), _hasHeaders(false), _setIdCounter(1), _mapSets(), _fields(), _setModeEnabled(false), _setStack(128)  {}
+    EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity), _setIdCounter(1), _mapSets(), _fields(), _setModeEnabled(false), _setStack(128)  {}
 
     ~EncoderImpl() { }
 
@@ -557,7 +557,11 @@ namespace crow {
 
     size_t size() const override { return _stack.GetSize(); }
 
-    void clear() override { _stack.Clear(); _hasHeaders = false; _setIdCounter = 1;}
+    void clear() override {
+      _stack.Clear();
+      _setIdCounter = 1;
+      _fields.clear();
+    }
 
   private:
 
@@ -662,7 +666,6 @@ namespace crow {
     }
 
     Stack _stack;
-    bool _hasHeaders;
     std::map<uint8_t, std::vector<uint8_t> > _mapSets;
     uint32_t _setIdCounter;
     std::vector<Field> _fields;
