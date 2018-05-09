@@ -176,6 +176,38 @@ TEST_F(EncTest, encodesSparse)
   delete pEnc;
 }
 
+TEST_F(EncTest, encodesSet)
+{
+  auto pEnc = crow::EncoderNew();
+  auto &enc = *pEnc;
+
+  std::string s = "";
+
+  PUT_ID(pEnc, MY_FIELD_A, "Larry");  s += "01000102054c61727279";
+
+  pEnc->startSet();
+  PUT_ID(pEnc, MY_FIELD_B, 23);       s += "11010236";
+  PUT_ID(pEnc, MY_FIELD_C, true);     s += "11020966";
+  auto setId = pEnc->endSet();       s += "040004812e8201";
+
+  pEnc->putSetRef(setId);                s += "0500";
+  enc.putRowSep();                    s += "03";
+
+  PUT_ID(pEnc, MY_FIELD_A, "Moe");    s += "80034d6f65";
+  pEnc->putSetRef(setId,0x03);                s += "3500";
+
+  const uint8_t* result = enc.data();
+
+  std::string actual;
+  BytesToHexString(result, enc.size(), actual);
+
+  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
+
+  ASSERT_EQ(s, actual);
+
+  delete pEnc;
+}
+
 
 static const char hexCharsLower[] = {
   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',

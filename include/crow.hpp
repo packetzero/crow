@@ -133,14 +133,15 @@ namespace crow {
      *
      * @return true on error, false on success.
      */
-//    virtual bool putSet(uint64_t setId, Encoder& encForSet, uint32_t fieldIndexAdd = 0U) = 0;
+    virtual void    startSet() = 0;
+    virtual uint8_t endSet() = 0;
 
     /**
      * @brief If found (previous call to putSet(setId) was made), places SETREF.
      *
      * @returns true on error, false on success.
      */
-//    virtual bool putSetRef(uint64_t setId, const Field *pFieldAdd = 0U) = 0;
+    virtual void    putSetRef(uint8_t setId, uint8_t flags = 0) = 0;
 
     virtual const uint8_t* data() const = 0;
     virtual size_t size() const = 0;
