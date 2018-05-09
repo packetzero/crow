@@ -145,7 +145,7 @@ namespace crow {
           uint8_t setId = *data.ptr++;
           const SetContext* pContext = _getSet(setId);
           if (pContext == 0L) {
-            _markError(ESPIPE, data);
+            _markError(ESPIPE, data); return true;
           } else {
             _byteCount += pContext->size();
           }
@@ -154,8 +154,8 @@ namespace crow {
 
         } else if (tagid == TFIELDINFO) {
 
-          bool hasNoValue = (tagbyte & TAGBYTE_FIELDINFO_NO_VALUE) == TAGBYTE_FIELDINFO_NO_VALUE;
-          const Field* pField = _decodeFieldInfo(data);
+          bool hasNoValue = (tagbyte & FIELDINFO_FLAG_NO_VALUE) == FIELDINFO_FLAG_NO_VALUE;
+          const Field* pField = _decodeFieldInfo(data, tagbyte);
           if (pField == 0L) {
             _markError(ENOSPC, data); return true;
           }
@@ -170,14 +170,17 @@ namespace crow {
       return false;
     }
 
-    const Field* _decodeFieldInfo(PData &data) {
+    const Field* _decodeFieldInfo(PData &data, uint8_t tagbyte) {
+
+      bool has_subid = (tagbyte & FIELDINFO_FLAG_HAS_SUBID) != 0;
+      bool has_name = (tagbyte & FIELDINFO_FLAG_HAS_NAME) != 0;
+
       if (data.remaining() < 2) {
         _markError(ENOSPC, data);
         return 0L;
       }
-      uint8_t index = *data.ptr++;
-      bool has_subid = (index & UPPER_BIT) != 0;
-      index = index & 0x7F;
+
+      uint8_t index = *data.ptr++ & 0x7F;
 
       // indexes should decode in-order
       if (index != _fields.size()) {
@@ -185,9 +188,7 @@ namespace crow {
         return 0L;
       }
 
-      uint8_t typeId = *data.ptr++;
-      bool has_name = (typeId & UPPER_BIT) != 0;
-      typeId = typeId & 0x7F;
+      uint8_t typeId = *data.ptr++ & 0x0F;
 
       // TODO : check valid typeid
 
@@ -601,25 +602,22 @@ namespace crow {
       } else {
         Stack &stack = _stack;
 
-        // index
-        uint8_t flag = (_setModeEnabled ? 0x10 : 0);
+        size_t namelen = pField->name.length();
+
+        // tagbyte
+
+        uint8_t tagbyte = CrowTag::TFIELDINFO;
+        if (_setModeEnabled) { tagbyte |= FIELDINFO_FLAG_NO_VALUE; }
+        if (pField->subid > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
+        if (namelen > 0) { tagbyte |= FIELDINFO_FLAG_HAS_NAME; }
+
         uint8_t* ptr = stack.Push(2);
-        ptr[0] = CrowTag::TFIELDINFO | flag;
-        ptr++;
-        if (pField->subid > 0) {
-          ptr[0] = pField->index | UPPER_BIT;
-        } else {
-          ptr[0] = pField->index;
-        }
+        *ptr++ = tagbyte;
+        *ptr++ = pField->index;
 
         // typeid
         ptr = stack.Push(1);
-        size_t namelen = pField->name.length();
-        if (namelen > 0) {
-          ptr[0] = pField->typeId | UPPER_BIT;
-        } else {
-          ptr[0] = pField->typeId;
-        }
+        ptr[0] = pField->typeId;
 
         // id and subid (if set)
         writeVarInt(pField->id, stack);
@@ -636,6 +634,7 @@ namespace crow {
         ((Field*)pField)->_written = true;
 
         if (_setModeEnabled) {
+          // now write value bytes to set data
           uint8_t* ptr = _setStack.Push(1);
           ptr[0] = pField->index | UPPER_BIT;
         }

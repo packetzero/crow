@@ -27,9 +27,9 @@ TEST_F(EncTest, withColumnNames) {
 
   std::string s = "";
 
-  PUT_NAME(pEnc, "name", "bob");     s += "01008100046e616d6503626f62";
-  PUT_NAME(pEnc, "age", 23);         s += "01018200036167652e";
-  PUT_NAME(pEnc, "active", true);    s += "010289000661637469766501";
+  PUT_NAME(pEnc, "name", "bob");     s += "41000100046e616d6503626f62";
+  PUT_NAME(pEnc, "age", 23);         s += "41010200036167652e";
+  PUT_NAME(pEnc, "active", true);    s += "410209000661637469766501";
   enc.putRowSep();                   s += "03";
 
   PUT_NAME(pEnc, "name","jerry");    s += "80056a65727279";

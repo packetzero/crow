@@ -103,7 +103,7 @@ std::string _typeName(CrowType ft) {
 
 TEST_F(DecTest, decodesUsingFieldNames) {
   auto vec = std::vector<uint8_t>();
-  HexStringToVec("01008100046e616d6505626f222c6201018200036167652e0102890006616374697665010380056a65727279817482000380056c696e646181428201", vec);
+  HexStringToVec("41000100046e616d6503626f6241010200036167652e4102090006616374697665010380056a65727279817482000380056c696e646181428201", vec);
 
   auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
@@ -111,7 +111,7 @@ TEST_F(DecTest, decodesUsingFieldNames) {
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
 
-  ASSERT_EQ("\"bo\"\",b\",23,1||jerry,58,0||linda,33,1||", actual);
+  ASSERT_EQ("bob,23,1||jerry,58,0||linda,33,1||", actual);
 
   delete pDec;
 }

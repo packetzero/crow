@@ -28,7 +28,9 @@ enum CrowTag {
   0000 TTTT    Tagid in bits 0-3
 */
 
-#define TAGBYTE_FIELDINFO_NO_VALUE (uint8_t)0x10
+#define FIELDINFO_FLAG_NO_VALUE  (uint8_t)0x10
+#define FIELDINFO_FLAG_HAS_SUBID (uint8_t)0x20
+#define FIELDINFO_FLAG_HAS_NAME  (uint8_t)0x40
 
 enum CrowType {
     NONE,
