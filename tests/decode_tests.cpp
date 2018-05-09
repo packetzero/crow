@@ -58,6 +58,25 @@ std::string quoted(std::string str)
 
 void BytesToHexString(const std::string &bytes, std::string &dest);
 
+std::string to_header_csv(std::vector<crow::Field> fields)
+{
+  static char tmp[48];
+  std::string s;
+  for (auto &fld : fields) {
+    if (fld.index > 0) s += ",";
+    if (fld.id > 0) {
+      sprintf(tmp,"%d", fld.id);
+      s += tmp;
+      if (fld.subid > 0) {
+        sprintf(tmp,"_%d", fld.subid);
+        s += tmp;
+      }
+    }
+    if (fld.name.length() > 0) { s += fld.name; };
+  }
+  return s;
+}
+
 std::string to_csv(std::vector<crow::GenDecRow> &rows)
 {
   static char tmp[48];
@@ -187,6 +206,23 @@ TEST_F(DecTest, decodesSet) {
   std::string actual = to_csv(dl._rows);
 
   ASSERT_EQ("Larry,23,1||Moe,23,1||", actual);
+
+  delete pDec;
+}
+
+TEST_F(DecTest, decodeSubids) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("010003012221010301e0d7024c03803a811b", vec);
+
+  auto dl = crow::GenericDecoderListener();
+  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto &dec = *pDec;
+  dec.decode(dl);
+  std::string actual = to_csv(dl._rows);
+  std::string headers = to_header_csv(pDec->getFields());
+
+  ASSERT_EQ("34,76||58,27||", actual);
+  ASSERT_EQ("1,1_44000", headers);
 
   delete pDec;
 }

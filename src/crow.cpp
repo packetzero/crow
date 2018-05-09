@@ -236,6 +236,8 @@ namespace crow {
 
     virtual size_t getExpandedSize() override { return _byteCount; }
 
+    virtual std::vector<Field> getFields() { return _fields; }
+
   private:
 
     bool _decodeValue(const Field *pField, PData &data, DecoderListener &listener) {

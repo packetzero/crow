@@ -105,10 +105,10 @@ namespace crow {
     virtual void put(const Field *pField, const uint8_t* bytes, size_t len) = 0;
     virtual void put(const Field *pField, bool value) = 0;
 
-    struct EncFieldId {
+    struct EncField {
     public:
-      EncFieldId(Encoder* _pEnc, uint32_t _id, uint32_t _subid = 0) : id(_id), subid(_subid), name(), pEnc(_pEnc) {}
-      EncFieldId(Encoder* _pEnc, std::string _name) : id(0), subid(0), name(_name), pEnc(_pEnc) {}
+      EncField(Encoder* _pEnc, uint32_t _id, uint32_t _subid = 0) : id(_id), subid(_subid), name(), pEnc(_pEnc) {}
+      EncField(Encoder* _pEnc, std::string _name) : id(0), subid(0), name(_name), pEnc(_pEnc) {}
 
       void operator=(bool value) {
         pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), (uint8_t)(value ? 1 : 0));
@@ -153,25 +153,36 @@ namespace crow {
       void operator=(const std::vector<uint8_t>& value) {
         pEnc->put(pEnc->fieldFor(crow::type_for(value), id, subid, name), value);
       }
+
+      EncField& operator[](int _subid) {
+        subid = _subid;
+        return *this;
+      }
+
+      EncField& operator[](uint32_t _subid) {
+        subid = _subid;
+        return *this;
+      }
+
       uint32_t id;
       uint32_t subid;
       std::string name;
       Encoder* pEnc;
     };
 
-    EncFieldId operator[] (uint32_t id) {
-      return EncFieldId(this, id);
+    EncField operator[] (uint32_t id) {
+      return EncField(this, id);
     }
-    EncFieldId operator[] (int id) {
-      return EncFieldId(this, (uint32_t)id);
+    EncField operator[] (int id) {
+      return EncField(this, (uint32_t)id);
     }
-    EncFieldId operator[] (std::string name) {
-      return EncFieldId(this, name);
+    EncField operator[] (std::string name) {
+      return EncField(this, name);
     }
-    EncFieldId operator[] (uint64_t id_and_subid) {
+    EncField operator[] (uint64_t id_and_subid) {
       uint32_t id = id_and_subid & 0x0FFFFFFFFL;
       uint32_t subid = (id_and_subid >> 32) & 0x0FFFFFFFFL;
-      return EncFieldId(this, id, subid);
+      return EncField(this, id, subid);
     }
 
     inline void put(int32_t value, uint32_t id, uint32_t subid = 0) {
@@ -359,6 +370,8 @@ namespace crow {
      * After decoding is finished, returns number of bytes after placing sets
      */
     virtual size_t getExpandedSize() = 0;
+
+    virtual std::vector<Field> getFields() = 0;
   };
 
   Encoder* EncoderNew(size_t initialCapacity = 4096);
