@@ -12,9 +12,9 @@
 
 #define MAX_SANE_SET_SIZE 32000000 // 32 MB should be plenty
 
-#define TYPE_MASK_SET    (1U << TYPE_SET)
-#define TYPE_MASK_SETREF (1U << TYPE_SETREF)
-#define TYPE_MASK_ROWSEP (1U << TYPE_ROWSEP)
+//#define TYPE_MASK_SET    (1U << TYPE_SET)
+//#define TYPE_MASK_SETREF (1U << TYPE_SETREF)
+//#define TYPE_MASK_ROWSEP (1U << TYPE_ROWSEP)
 
 static const uint8_t UPPER_BIT = (uint8_t)0x80;
 
@@ -60,7 +60,7 @@ namespace crow {
      */
     DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _data(pEncData, encLength), _fields(), _err(0), _typemask(0L),
       _errOffset(0L), _setId(0L), _mapSets(),
-      _byteCount(encLength), _flags(0) {
+      _byteCount(encLength), _flags(0), _numRows(0) {
     }
 
     ~DecoderImpl() {
@@ -77,12 +77,12 @@ namespace crow {
     uint32_t decode(DecoderListener &listener, uint64_t setId = 0L) override {
       _setId = setId;
 
-      uint32_t numRows = 0;
+      _numRows = 0;
       while(false == decodeRow(listener)) {
-        numRows++;
+        _numRows++;
       }
 
-      return numRows;
+      return _numRows;
     }
 
 /*
@@ -118,15 +118,16 @@ namespace crow {
             break;
           }
 
-        } else if (tagid == TROWSEP) {
+        } else if (tagid == TROW) {
+          if (_numRows > 0) { listener.onRowEnd(); }
+
           _flags = (tagbyte >> 4) & 0x07;
-          listener.onRowSep();
           break;
 
         } else if (tagid == TFLAGS) {
 
           _flags = (tagbyte >> 4) & 0x07;
-
+/*
         } else if (tagid == TSET) {
 
           if (data.empty()) { _markError(ENOSPC, data); return true; }
@@ -137,7 +138,7 @@ namespace crow {
             _markError(ENOSPC, data); return true;
           }
 
-          /* const SetContext* pContext = */ _putSet(setid, data.ptr, setlen);
+          _putSet(setid, data.ptr, setlen);
           data.ptr += setlen;
 
         } else if (tagid == TSETREF) {
@@ -151,17 +152,17 @@ namespace crow {
           }
           PData setData(pContext->data(), pContext->size());
           _doDecodeRow(listener, setData);
+*/
+        } else if (tagid == THFIELD) {
 
-        } else if (tagid == TFIELDINFO) {
-
-          bool hasNoValue = (tagbyte & FIELDINFO_FLAG_NO_VALUE) == FIELDINFO_FLAG_NO_VALUE;
+          //bool hasNoValue = (tagbyte & FIELDINFO_FLAG_NO_VALUE) == FIELDINFO_FLAG_NO_VALUE;
           const Field* pField = _decodeFieldInfo(data, tagbyte);
           if (pField == 0L) {
             _markError(ENOSPC, data); return true;
           }
-          if (hasNoValue || _decodeValue(pField, data, listener)) {
-            break;
-          }
+          //if (hasNoValue || _decodeValue(pField, data, listener)) {
+          //  break;
+          //}
         } else {
           _markError(EINVAL, data); return true;
         }
@@ -236,7 +237,7 @@ namespace crow {
 
     virtual size_t getExpandedSize() override { return _byteCount; }
 
-    virtual std::vector<Field> getFields() { return _fields; }
+    virtual std::vector<Field> getFields() override { return _fields; }
 
   private:
 
@@ -383,6 +384,7 @@ namespace crow {
     std::map<uint8_t, SetContext*> _mapSets;
     size_t         _byteCount;
     uint8_t        _flags;
+    uint32_t       _numRows;
 
     uint64_t readVarInt(PData &data) {
       uint64_t value = 0L;
@@ -401,279 +403,5 @@ namespace crow {
   };
 
   Decoder* DecoderNew(const uint8_t* pEncData, size_t encLength) { return new DecoderImpl(pEncData, encLength); }
-
-  class EncoderImpl : public Encoder {
-  public:
-    EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity), _setIdCounter(1), _mapSets(), _fields(), _setModeEnabled(false), _setStack(128)  {}
-
-    ~EncoderImpl() { }
-
-    Field *fieldFor(CrowType type, uint32_t id, uint32_t subid = 0) override {
-      for (int i=0; i < _fields.size(); i++) {
-        Field *pField = &_fields[i];
-        if (pField->id == id && pField->subid == subid) return pField;
-      }
-      Field* p = _newField(type);
-      if (p == _dummyField()) return p;
-
-      p->id = id;
-      p->subid = subid;
-
-      return p;
-    }
-
-    Field *fieldFor(CrowType type, std::string name) override {
-      for (int i=0; i < _fields.size(); i++) {
-        Field *pField = &_fields[i];
-        if (pField->name == name) return pField;
-      }
-      Field* p = _newField(type);
-      if (p == _dummyField()) return p;
-
-      p->name = name;
-
-      return p;
-    }
-
-    Field* _dummyField() {
-      static Field dummy = { NONE /* type */, 0 /* id */, 9999999, "FIELD_LIMIT_REACHED", 0 /* index */ };
-      return &dummy;
-    }
-
-    void put(const Field *pField, int32_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeVarInt(ZigZagEncode32(value), staq());
-    }
-    void put(const Field *pField, uint32_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeVarInt(value, staq());
-    }
-    void put(const Field *pField, int64_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeVarInt(ZigZagEncode64(value), staq());
-    }
-    void put(const Field *pField, uint64_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-     writeVarInt(value, staq());
-    }
-    void put(const Field *pField, double value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeFixed64(EncodeDouble(value), staq());
-    }
-    void put(const Field *pField, float value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeFixed32(EncodeFloat(value), staq());
-    }
-    void put(const Field *pField, const std::string value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeVarInt(value.length(), staq());
-      memcpy(staq().Push(value.length()), value.c_str(), value.length());
-    }
-    void put(const Field *pField, const char* str) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      size_t srcLen = strlen(str);
-      writeVarInt(srcLen, staq());
-      memcpy(staq().Push(srcLen), str, srcLen);
-    }
-    void put(const Field *pField, const std::vector<uint8_t>& value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeVarInt(value.size(), staq());
-      memcpy(staq().Push(value.size()), value.data(), value.size());
-    }
-    void put(const Field *pField, const uint8_t* bytes, size_t len) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeVarInt(len, staq());
-      memcpy(staq().Push(len), bytes, len);
-    }
-    void put(const Field *pField, bool value) override {
-      put(pField, (value ? (uint8_t)1 : (uint8_t)0));
-    }
-
-    virtual void put(const Field *pField, int8_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      uint8_t* ptr = staq().Push(1);
-      *ptr = (uint8_t)value;
-    }
-    virtual void put(const Field *pField, uint8_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      uint8_t* ptr = staq().Push(1);
-      *ptr = value;
-    }
-    virtual void put(const Field *pField, int16_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeVarInt(ZigZagEncode32(value), staq());
-    }
-    virtual void put(const Field *pField, uint16_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
-      writeVarInt(value, staq());
-    }
-
-    void putRowSep() override {
-      *(_stack.Push(1)) = TROWSEP;
-    }
-
-    virtual void    putSetRef(uint8_t setId, uint8_t flags = 0) override {
-      *(_stack.Push(1)) = TSETREF | ((flags & 0x07) << 4);
-      *(_stack.Push(1)) = setId;
-    }
-
-    virtual void    startSet() override {
-      _setModeEnabled = true;
-      // TODO: check if already in set mode
-      _setStack.Clear();
-    }
-
-    virtual uint8_t endSet() override {
-      _setModeEnabled = false;
-      auto setId = (uint8_t)_mapSets.size();
-      auto ptr = _setStack.Bottom();
-      auto setLen = _setStack.GetSize();
-
-      _mapSets[setId] = std::vector<uint8_t>(ptr, ptr + setLen);
-
-      *(_stack.Push(1)) = TSET;
-      *(_stack.Push(1)) = setId;
-      writeVarInt(setLen, _stack);
-      memcpy(_stack.Push(setLen), ptr, setLen);
-
-      return setId;
-    }
-
-    const uint8_t* data() const override { return _stack.Bottom(); }
-
-    size_t size() const override { return _stack.GetSize(); }
-
-    void clear() override {
-      _stack.Clear();
-      _setIdCounter = 1;
-      _fields.clear();
-    }
-
-  private:
-
-    /**
-     * return _stack or _setStack, depending on _setModeEnabled field.
-     */
-    Stack & staq() { return (_setModeEnabled ? _setStack : _stack); }
-
-    Field *_newField(CrowType typeId) {
-      // new one
-      uint8_t index = (uint8_t)_fields.size();
-      if ((index & UPPER_BIT) != 0) {
-        // wow, 127 fields?  return a dummy field .. one that doesn't get written
-        return _dummyField();
-      }
-      _fields.push_back(Field());
-      Field *p = &_fields[index];
-      p->index = index;
-      p->typeId = typeId;
-      return p;
-    }
-
-    void writeFixed64(uint64_t value, Stack &stack) {
-      union { uint64_t ival; uint8_t bytes[8];};
-      ival = value;
-      memcpy(stack.Push(sizeof(value)), bytes, sizeof(bytes));
-    }
-    void writeFixed32(uint32_t value, Stack &stack) {
-      union { uint32_t ival; uint8_t bytes[4];};
-      ival = value;
-      memcpy(stack.Push(sizeof(value)), bytes, sizeof(bytes));
-    }
-    /*
-     * one byte 0x80 | index
-     */
-    void writeIndexTag(const Field *pField) {
-
-      if (pField->_written) {
-
-        Stack &stack = (_setModeEnabled ? _setStack : _stack);
-        uint8_t* ptr = stack.Push(1);
-        ptr[0] = pField->index | UPPER_BIT;
-
-      } else {
-        Stack &stack = _stack;
-
-        size_t namelen = pField->name.length();
-
-        // tagbyte
-
-        uint8_t tagbyte = CrowTag::TFIELDINFO;
-        if (_setModeEnabled) { tagbyte |= FIELDINFO_FLAG_NO_VALUE; }
-        if (pField->subid > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
-        if (namelen > 0) { tagbyte |= FIELDINFO_FLAG_HAS_NAME; }
-
-        uint8_t* ptr = stack.Push(2);
-        *ptr++ = tagbyte;
-        *ptr++ = pField->index;
-
-        // typeid
-        ptr = stack.Push(1);
-        ptr[0] = pField->typeId;
-
-        // id and subid (if set)
-        writeVarInt(pField->id, stack);
-        if (pField->subid > 0) { writeVarInt(pField->subid, stack); }
-
-        // name (if set)
-        if (namelen > 0) {
-          writeVarInt(namelen, stack);
-          ptr = stack.Push(namelen);
-          memcpy(ptr,pField->name.c_str(),namelen);
-        }
-
-        // mark as written, so we dont write FIELDINFO more than once
-        ((Field*)pField)->_written = true;
-
-        if (_setModeEnabled) {
-          // now write value bytes to set data
-          uint8_t* ptr = _setStack.Push(1);
-          ptr[0] = pField->index | UPPER_BIT;
-        }
-      }
-    }
-
-    size_t writeVarInt(uint64_t value, Stack &stack) {
-      size_t i=0;
-      while (true) {
-        i++;
-        uint8_t b = (uint8_t)(value & 0x07F);
-        value = value >> 7;
-        if (0L == value) {
-          uint8_t* ptr = stack.Push(1);
-          *ptr = b;
-          break;
-        }
-        uint8_t* p = stack.Push(1);
-        *p = (b | 0x80u);
-      }
-
-      return i;
-    }
-
-    Stack _stack;
-    std::map<uint8_t, std::vector<uint8_t> > _mapSets;
-    uint32_t _setIdCounter;
-    std::vector<Field> _fields;
-    bool _setModeEnabled;
-    Stack _setStack;
-
-  };
-
-  Encoder* EncoderNew(size_t initialCapacity) { return new EncoderImpl(initialCapacity); }
 
 }
