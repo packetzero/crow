@@ -12,10 +12,6 @@
 
 #define MAX_SANE_SET_SIZE 32000000 // 32 MB should be plenty
 
-//#define TYPE_MASK_SET    (1U << TYPE_SET)
-//#define TYPE_MASK_SETREF (1U << TYPE_SETREF)
-//#define TYPE_MASK_ROWSEP (1U << TYPE_ROWSEP)
-
 static const uint8_t UPPER_BIT = (uint8_t)0x80;
 
 namespace crow {
@@ -85,13 +81,6 @@ namespace crow {
       return _numRows;
     }
 
-/*
-    void init(const uint8_t* pEncData, size_t encLength) override {
-      _ptr = pEncData;
-      _end = pEncData + encLength;
-      _fields.clear();
-    }
-*/
 
     bool decodeRow(DecoderListener &listener) override {
       return _doDecodeRow(listener, _data);
@@ -127,42 +116,12 @@ namespace crow {
         } else if (tagid == TFLAGS) {
 
           _flags = (tagbyte >> 4) & 0x07;
-/*
-        } else if (tagid == TSET) {
-
-          if (data.empty()) { _markError(ENOSPC, data); return true; }
-          uint8_t setid = *data.ptr++;
-
-          auto setlen = readVarInt(data);
-          if (setlen == 0 || setlen > MAX_SANE_SET_SIZE) {
-            _markError(ENOSPC, data); return true;
-          }
-
-          _putSet(setid, data.ptr, setlen);
-          data.ptr += setlen;
-
-        } else if (tagid == TSETREF) {
-
-          uint8_t setId = *data.ptr++;
-          const SetContext* pContext = _getSet(setId);
-          if (pContext == 0L) {
-            _markError(ESPIPE, data); return true;
-          } else {
-            _byteCount += pContext->size();
-          }
-          PData setData(pContext->data(), pContext->size());
-          _doDecodeRow(listener, setData);
-*/
         } else if (tagid == THFIELD) {
 
-          //bool hasNoValue = (tagbyte & FIELDINFO_FLAG_NO_VALUE) == FIELDINFO_FLAG_NO_VALUE;
           const Field* pField = _decodeFieldInfo(data, tagbyte);
           if (pField == 0L) {
             _markError(ENOSPC, data); return true;
           }
-          //if (hasNoValue || _decodeValue(pField, data, listener)) {
-          //  break;
-          //}
         } else {
           _markError(EINVAL, data); return true;
         }

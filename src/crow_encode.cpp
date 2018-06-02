@@ -15,29 +15,10 @@ static const uint8_t UPPER_BIT = (uint8_t)0x80;
 
 namespace crow {
 
-
-
-/*
-  struct PData
-  {
-    const uint8_t*  start;
-    const uint8_t*  ptr;
-    const uint8_t*  end;
-    size_t          length;
-
-    size_t remaining() { return (size_t)(end - ptr); }
-    bool empty() { return (ptr >= end); }
-
-    PData(const uint8_t* p, size_t len) : start(p), ptr(p), end(p + len), length(len) { }
-
-  };
-*/
-
   class EncoderImpl : public Encoder {
   public:
     EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity),
-          _dataStack(1024), _hdrStack(1024), //_setIdCounter(1),
-          /*_mapSets(),*/ _fields() /*, _setModeEnabled(false), _setStack(128) */ {}
+          _dataStack(1024), _hdrStack(1024), _fields()  {}
 
     ~EncoderImpl() { }
 
@@ -171,39 +152,6 @@ namespace crow {
       }
     }
 
-
-/*
-    void putRowSep() override {
-      *(_stack.Push(1)) = TROWSEP;
-    }
-
-    virtual void    putSetRef(uint8_t setId, uint8_t flags = 0) override {
-      *(_stack.Push(1)) = TSETREF | ((flags & 0x07) << 4);
-      *(_stack.Push(1)) = setId;
-    }
-
-    virtual void    startSet() override {
-      _setModeEnabled = true;
-      // TODO: check if already in set mode
-      _setStack.Clear();
-    }
-
-    virtual uint8_t endSet() override {
-      _setModeEnabled = false;
-      auto setId = (uint8_t)_mapSets.size();
-      auto ptr = _setStack.Bottom();
-      auto setLen = _setStack.GetSize();
-
-      _mapSets[setId] = std::vector<uint8_t>(ptr, ptr + setLen);
-
-      *(_stack.Push(1)) = TSET;
-      *(_stack.Push(1)) = setId;
-      writeVarInt(setLen, _stack);
-      memcpy(_stack.Push(setLen), ptr, setLen);
-
-      return setId;
-    }
-*/
     virtual void startRow() override {
       _flush();
     }
@@ -218,7 +166,6 @@ namespace crow {
 
     void clear() override {
       _stack.Clear();
-      //_setIdCounter = 1;
       _fields.clear();
     }
 
@@ -260,7 +207,7 @@ namespace crow {
 
       if (pField->_written) {
 
-        Stack &stack = _dataStack; //(_setModeEnabled ? _setStack : _stack);
+        Stack &stack = _dataStack;
         uint8_t* ptr = stack.Push(1);
         ptr[0] = pField->index | UPPER_BIT;
 
@@ -269,7 +216,6 @@ namespace crow {
         size_t namelen = pField->name.length();
 
         uint8_t tagbyte = CrowTag::THFIELD;
-        //if (_setModeEnabled) { tagbyte |= FIELDINFO_FLAG_NO_VALUE; }
         if (pField->subid > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
         if (namelen > 0) { tagbyte |= FIELDINFO_FLAG_HAS_NAME; }
 
@@ -294,13 +240,6 @@ namespace crow {
 
         // mark as written, so we dont write FIELDINFO more than once
         ((Field*)pField)->_written = true;
-/*
-        if (_setModeEnabled) {
-          // now write value bytes to set data
-          uint8_t* ptr = _setStack.Push(1);
-          ptr[0] = pField->index | UPPER_BIT;
-        }
-*/
 
         // field index on data row
         ptr = _dataStack.Push(1);
@@ -328,11 +267,7 @@ namespace crow {
     }
 
     Stack _stack, _dataStack, _hdrStack;
-    //std::map<uint8_t, std::vector<uint8_t> > _mapSets;
-    //uint32_t _setIdCounter;
     std::vector<Field> _fields;
-    //bool _setModeEnabled;
-    //Stack _setStack;
 
   };
 
