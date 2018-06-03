@@ -207,6 +207,71 @@ TEST_F(EncTest, encodesSparse)
 
   delete pEnc;
 }
+
+#ifndef MIN
+#define MIN(a,b) (a)<(b)?(a):(b)
+#endif
+
+struct Person {
+  int32_t     age;
+  bool        active;
+  char        name[3];
+};
+
+#define PERSON(DEST,NAME,AGE,ACTIVE) { \
+  DEST = Person(); \
+  strncpy(DEST.name,NAME,MIN(strlen(NAME),sizeof(DEST.name))); \
+  DEST.age = AGE; \
+  DEST.active = ACTIVE; \
+}
+
+TEST_F(EncTest, encodesStruct)
+{
+  auto pEnc = crow::EncoderNew();
+  auto &enc = *pEnc;
+
+  std::string s = "";
+  Person person = Person();
+
+  int fieldId = 10;
+  enc.struct_hdr(crow::type_for(person.age), fieldId++);
+  enc.struct_hdr(crow::type_for(person.active), fieldId++);
+  enc.struct_hdr(crow::type_for(person.name), fieldId++, 0, "", sizeof(person.name));
+
+  s += "1300020a";
+  s += "1301090b";
+  s += "1302010c03";
+
+  PERSON(person,"Bob", 23, true);
+  enc.put_struct(&person, sizeof(person));
+
+  s += "05";
+  s += "17000000";
+  s += "01";
+  s += "426f62";
+
+  PERSON(person,"Moe", 62, false);
+  enc.startRow();
+  enc.put_struct(&person, sizeof(person));
+
+  s += "05";
+  s += "3e000000";
+  s += "00";
+  s += "4d6f65";
+
+  const uint8_t* result = enc.data();
+
+  std::string actual;
+  BytesToHexString(result, enc.size(), actual);
+
+  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
+
+  ASSERT_EQ(s, actual);
+
+  delete pEnc;
+}
+
+
 /*
 TEST_F(EncTest, encodesSet)
 {

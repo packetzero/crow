@@ -32,6 +32,10 @@ namespace crow {
     virtual void put(const Field *pField, const uint8_t* bytes, size_t len) = 0;
     virtual void put(const Field *pField, bool value) = 0;
 
+    virtual int struct_hdr(CrowType typeId, uint32_t id, uint32_t subid = 0, std::string name = "", int fixedLength = 0) = 0;
+    virtual int struct_hdr(CrowType typ, std::string name, int fixedLength = 0) = 0;
+    virtual int put_struct(const void *data, size_t struct_size) = 0;
+
     struct EncField {
     public:
       EncField(Encoder* _pEnc, uint32_t _id, uint32_t _subid = 0) : id(_id), subid(_subid), name(), pEnc(_pEnc) {}
@@ -95,7 +99,8 @@ namespace crow {
       uint32_t subid;
       std::string name;
       Encoder* pEnc;
-    };
+
+    }; // end struct EncField
 
     EncField operator[] (uint32_t id) {
       return EncField(this, id);
@@ -203,6 +208,8 @@ namespace crow {
     inline void put(bool value, const std::string name) {
       put(fieldFor(crow::type_for(value), name), value);
     }
+
+//    virtual void put_def(const Field *pField) = 0;
 
     virtual void startRow() = 0;
     virtual void flush() const = 0;

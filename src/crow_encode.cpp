@@ -15,10 +15,31 @@ static const uint8_t UPPER_BIT = (uint8_t)0x80;
 
 namespace crow {
 
+  size_t byte_size(CrowType typeId)
+  {
+    switch(typeId) {
+      case TINT8: return 1;
+      case TUINT8: return 1;
+      case TINT16: return 2;
+      case TUINT16: return 2;
+      case TINT32: return 4;
+      case TUINT32: return 4;
+      case TINT64: return 8;
+      case TUINT64: return 8;
+      case TFLOAT32: return 4;
+      case TFLOAT64: return 8;
+      default:
+      printf("CrowType.byte_size(%d) unknown for type", typeId);
+      return 0;
+    }
+  }
+
   class EncoderImpl : public Encoder {
   public:
     EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity),
-          _dataStack(1024), _hdrStack(1024), _fields()  {}
+          _dataStack(1024), _hdrStack(1024), _fields(),
+          _structFields(), _haveStructData(false), _structLen(0),
+          _structDefFinalized(false), _structBuf(0)  {}
 
     ~EncoderImpl() { }
 
@@ -143,13 +164,25 @@ namespace crow {
         memcpy(_stack.Push(_hdrStack.GetSize()), _hdrStack.Bottom(), _hdrStack.GetSize());
         _hdrStack.Clear();
       }
-      if (_dataStack.GetSize() > 0) {
-        //
+
+      if (_structLen > 0 && _haveStructData) {
         *(_stack.Push(1)) = TROW;
+        memcpy(_stack.Push(_structLen), _structBuf.Bottom(), _structLen);
+        _structDefFinalized = true;
+      }
+
+      if (_dataStack.GetSize() > 0) {
+        if (_structLen > 0) {
+          writeVarInt(_dataStack.GetSize(),_stack);
+        } else {
+          *(_stack.Push(1)) = TROW;
+        }
+
         // copy data
         memcpy(_stack.Push(_dataStack.GetSize()), _dataStack.Bottom(), _dataStack.GetSize());
         _dataStack.Clear();
       }
+      _haveStructData = false;
     }
 
     virtual void startRow() override {
@@ -167,6 +200,49 @@ namespace crow {
     void clear() override {
       _stack.Clear();
       _fields.clear();
+      _structLen = 0;
+      _structFields.clear();
+    }
+
+    virtual int struct_hdr(CrowType typeId, uint32_t id, uint32_t subid = 0, std::string name = "", int fixedLength = 0) override {
+      // TODO: validate typeId, fixedLength for string,bytes
+      // TODO: once first row with struct has been written, can't be changed
+      if (_structDefFinalized) {
+        return -1;
+      }
+
+      Field *pField = fieldFor(typeId, id, subid);
+      pField->name = name;
+      pField->isRaw = true;
+      pField->fixedLen = fixedLength;
+      _structFields.push_back(*pField);
+
+      _structLen += (fixedLength > 0 ? fixedLength : byte_size(typeId));
+
+      writeIndexTag(pField);
+
+      return 0;
+    }
+
+    virtual int struct_hdr(CrowType typ, std::string name, int fixedLength = 0) override {
+      return struct_hdr(typ, 0, 0, name, fixedLength);
+    }
+
+    int put_struct(const void *data, size_t struct_size) override {
+      if (struct_size == 0 || struct_size != _structLen) {
+        return -1;
+      }
+
+      if (_structBuf.GetSize() == 0) {
+        _structBuf.Push(_structLen);
+      }
+
+      startRow();
+
+      memcpy(_structBuf.Bottom(), data, _structLen);
+      _haveStructData = true;
+
+      return 0;
     }
 
   private:
@@ -218,6 +294,7 @@ namespace crow {
         uint8_t tagbyte = CrowTag::THFIELD;
         if (pField->subid > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
         if (namelen > 0) { tagbyte |= FIELDINFO_FLAG_HAS_NAME; }
+        if (pField->isRaw) { tagbyte |= FIELDINFO_FLAG_RAW; }
 
         uint8_t* ptr = stack.Push(2);
         *ptr++ = tagbyte;
@@ -238,13 +315,17 @@ namespace crow {
           memcpy(ptr,pField->name.c_str(),namelen);
         }
 
+        if (pField->isRaw && pField->fixedLen > 0) {
+          writeVarInt(pField->fixedLen, stack);
+        }
         // mark as written, so we dont write FIELDINFO more than once
         ((Field*)pField)->_written = true;
 
-        // field index on data row
-        ptr = _dataStack.Push(1);
-        ptr[0] = pField->index | UPPER_BIT;
-
+        if (!pField->isRaw) {
+          // field index on data row
+          ptr = _dataStack.Push(1);
+          ptr[0] = pField->index | UPPER_BIT;
+        }
       }
     }
 
@@ -268,7 +349,11 @@ namespace crow {
 
     Stack _stack, _dataStack, _hdrStack;
     std::vector<Field> _fields;
-
+    std::vector<Field> _structFields;
+    bool _haveStructData;
+    size_t _structLen;
+    bool _structDefFinalized;
+    Stack _structBuf;
   };
 
   Encoder* EncoderNew(size_t initialCapacity) { return new EncoderImpl(initialCapacity); }
