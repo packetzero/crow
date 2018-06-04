@@ -34,6 +34,11 @@ namespace crow {
 
     virtual int struct_hdr(CrowType typeId, uint32_t id, uint32_t subid = 0, std::string name = "", int fixedLength = 0) = 0;
     virtual int struct_hdr(CrowType typ, std::string name, int fixedLength = 0) = 0;
+    /**
+     * @brief place struct data
+     * @throws invalid_argument if struct_size 0 or does not match definition.
+     * @returns 0 on success
+     */
     virtual int put_struct(const void *data, size_t struct_size) = 0;
 
     struct EncField {

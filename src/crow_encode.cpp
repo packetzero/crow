@@ -1,5 +1,6 @@
 #include <map>
 #include <errno.h>
+#include <stdexcept>
 
 #include "../include/crow.hpp"
 #include "stack.hpp"
@@ -165,16 +166,31 @@ namespace crow {
         _hdrStack.Clear();
       }
 
+      // write struct data if defined
+
       if (_structLen > 0 && _haveStructData) {
+
+        if (_structDefFinalized && !_haveStructData) {
+          throw new std::runtime_error("row has no struct data");
+        }
         *(_stack.Push(1)) = TROW;
         memcpy(_stack.Push(_structLen), _structBuf.Bottom(), _structLen);
         _structDefFinalized = true;
+
+        // when we have both struct and variable fields, need to write length
+        // of variable section after struct data
+
+        if (_fields.size() > _structFields.size()) {
+          writeVarInt(_dataStack.GetSize(),_stack);
+        }
       }
 
+      // write variable fields
+      
       if (_dataStack.GetSize() > 0) {
-        if (_structLen > 0) {
-          writeVarInt(_dataStack.GetSize(),_stack);
-        } else {
+
+        // write TROW, but only if we don't have struct data defined
+        if (_structLen == 0) {
           *(_stack.Push(1)) = TROW;
         }
 
@@ -208,7 +224,11 @@ namespace crow {
       // TODO: validate typeId, fixedLength for string,bytes
       // TODO: once first row with struct has been written, can't be changed
       if (_structDefFinalized) {
-        return -1;
+        throw new std::invalid_argument("Trying to add struct field after first struct row finalized");
+      }
+
+      if (_fields.size() > _structFields.size()) {
+        throw new std::invalid_argument("All struct columns must come before variable columns");
       }
 
       Field *pField = fieldFor(typeId, id, subid);
@@ -230,7 +250,9 @@ namespace crow {
 
     int put_struct(const void *data, size_t struct_size) override {
       if (struct_size == 0 || struct_size != _structLen) {
-        return -1;
+        char tmp[128];
+        snprintf(tmp, sizeof(tmp), "struct size:%lu does not match definition:%lu", struct_size, _structLen);
+        throw new std::invalid_argument(tmp);
       }
 
       if (_structBuf.GetSize() == 0) {

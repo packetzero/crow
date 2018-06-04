@@ -1,17 +1,7 @@
 #include <gtest/gtest.h>
 #include "../include/crow.hpp"
 
-void BytesToHexString(const unsigned char *bytes, size_t len, std::string &dest);
-void BytesToHexString(const Bytes &vec, std::string &dest);
-void BytesToHexString(const std::string &bytes, std::string &dest);
-
-#define ENC_GTEST_LOG_ENABLED 0
-
-enum MY_FIELDS {
-  MY_FIELD_A = 2,
-  MY_FIELD_B = 54,
-  MY_FIELD_C = 102
-};
+#include "test_defs.hpp"
 
 class EncTest : public ::testing::Test {
  protected:
@@ -195,128 +185,6 @@ TEST_F(EncTest, encodesSparse)
 
   enc[MY_FIELD_B] = 62;       s += "817c";
   enc[MY_FIELD_C] = false;    s += "8200";
-
-  const uint8_t* result = enc.data();
-
-  std::string actual;
-  BytesToHexString(result, enc.size(), actual);
-
-  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
-
-  ASSERT_EQ(s, actual);
-
-  delete pEnc;
-}
-
-#ifndef MIN
-#define MIN(a,b) (a)<(b)?(a):(b)
-#endif
-
-struct Person {
-  int32_t     age;
-  bool        active;
-  char        name[3];
-};
-
-#define PERSON(DEST,NAME,AGE,ACTIVE) { \
-  DEST = Person(); \
-  strncpy(DEST.name,NAME,MIN(strlen(NAME),sizeof(DEST.name))); \
-  DEST.age = AGE; \
-  DEST.active = ACTIVE; \
-}
-
-TEST_F(EncTest, encodesStruct)
-{
-  auto pEnc = crow::EncoderNew();
-  auto &enc = *pEnc;
-
-  std::string s = "";
-  Person person = Person();
-
-  int fieldId = 10;
-  enc.struct_hdr(crow::type_for(person.age), fieldId++);
-  enc.struct_hdr(crow::type_for(person.active), fieldId++);
-  enc.struct_hdr(crow::type_for(person.name), fieldId++, 0, "", sizeof(person.name));
-
-  s += "1300020a";
-  s += "1301090b";
-  s += "1302010c03";
-
-  PERSON(person,"Bob", 23, true);
-  enc.put_struct(&person, sizeof(person));
-
-  enc["name"] = "bob";         s += "43030100046e616d65";  // field def
-
-  // row data
-
-  s += "05";
-  s += "17000000";
-  s += "01";
-  s += "426f62";
-
-  s += "05"; // length of variable field section
-  s += "8303626f62";
-
-  PERSON(person,"Moe", 62, false);
-  enc.startRow();
-  enc.put_struct(&person, sizeof(person));
-
-  enc["name"] = "bobo";
-
-  s += "05";
-  s += "3e000000";
-  s += "00";
-  s += "4d6f65";
-
-  s += "06"; // length of variable field section
-  s += "8304626f626f";
-
-  const uint8_t* result = enc.data();
-
-  std::string actual;
-  BytesToHexString(result, enc.size(), actual);
-
-  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
-
-  ASSERT_EQ(s, actual);
-
-  delete pEnc;
-}
-
-
-TEST_F(EncTest, encodesStructAndVariable)
-{
-  auto pEnc = crow::EncoderNew();
-  auto &enc = *pEnc;
-
-  std::string s = "";
-  Person person = Person();
-
-  int fieldId = 10;
-  enc.struct_hdr(crow::type_for(person.age), fieldId++);
-  enc.struct_hdr(crow::type_for(person.active), fieldId++);
-  enc.struct_hdr(crow::type_for(person.name), fieldId++, 0, "", sizeof(person.name));
-
-  s += "1300020a";
-  s += "1301090b";
-  s += "1302010c03";
-
-  PERSON(person,"Bob", 23, true);
-  enc.put_struct(&person, sizeof(person));
-
-  s += "05";
-  s += "17000000";
-  s += "01";
-  s += "426f62";
-
-  PERSON(person,"Moe", 62, false);
-  enc.startRow();
-  enc.put_struct(&person, sizeof(person));
-
-  s += "05";
-  s += "3e000000";
-  s += "00";
-  s += "4d6f65";
 
   const uint8_t* result = enc.data();
 
