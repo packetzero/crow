@@ -2,7 +2,7 @@
 #define _TEST_DEFS_HPP_
 
 
-#define ENC_GTEST_LOG_ENABLED 1
+#define ENC_GTEST_LOG_ENABLED 0
 
 enum MY_FIELDS {
   MY_FIELD_A = 2,
