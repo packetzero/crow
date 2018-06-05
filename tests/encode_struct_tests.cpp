@@ -56,15 +56,15 @@ TEST_F(EncStructTest, encodesStructAndVariable)
   s += "8304626f626f";
 
   // third row : test no variable data
-//  enc.startRow();
-//  enc.put_struct(&person, sizeof(person));
+  enc.startRow();
+  enc.put_struct(&person, sizeof(person));
 
-//  s += "05";
-//  s += "3e000000";
-//  s += "00";
-//  s += "4d6f65";
+  s += "05";
+  s += "3e000000";
+  s += "00";
+  s += "4d6f65";
 
-//  s += "00"; // length of variable field section
+  s += "00"; // length of variable field section
 
   const uint8_t* result = enc.data();
 

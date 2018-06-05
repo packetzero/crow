@@ -8,6 +8,8 @@
 
 namespace crow {
 
+  const int RV_SKIP_VARIABLE_FIELDS = 2;
+
   class DecoderListener {
   public:
     virtual void onField(const Field *pField, int32_t value, uint8_t flags) {}
@@ -17,7 +19,13 @@ namespace crow {
     virtual void onField(const Field *pField, double value, uint8_t flags) {}
     virtual void onField(const Field *pField, const std::string &value, uint8_t flags) {}
     virtual void onField(const Field *pField, const std::vector<uint8_t> value, uint8_t flags) {}
+    virtual void onRowStart() {}
     virtual void onRowEnd() {}
+    /**
+     * @returns 0 by default.  If RV_SKIP_VARIABLE_FIELDS returned,
+     * decoder will skip over variable length fields associated with row.
+     */
+    virtual int onStruct(const uint8_t *data, size_t datalen) { return 0;}
   };
 
   class Decoder {
@@ -93,7 +101,13 @@ namespace crow {
   class GenericDecoderListener : public DecoderListener {
   public:
 
-    GenericDecoderListener() : _rows(), _rownum(0) {
+    GenericDecoderListener() : _rows(), _structData(), _rownum(0) {
+    }
+    int onStruct(const uint8_t* data, size_t datalen) override {
+      auto index = _structData.size();
+      _structData.push_back(std::vector<uint8_t>(datalen));
+      memcpy(_structData[index].data(), data, datalen);
+      return 0;
     }
     void onField(const Field *pField, int32_t value, uint8_t flags) override {
       sprintf(tmp,"%d", value);
@@ -138,6 +152,7 @@ namespace crow {
     void onRowEnd() override { _rownum++; }
 
     std::vector< GenDecRow > _rows;
+    std::vector< std::vector<uint8_t> > _structData;
 
   private:
 

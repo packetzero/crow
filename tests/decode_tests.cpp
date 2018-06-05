@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "../include/crow.hpp"
-
+#include "test_defs.hpp"
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
@@ -8,7 +8,6 @@ int main(int argc, char **argv) {
   return status;
 }
 
-void HexStringToVec(const std::string str, Bytes &dest);
 
 class DecTest : public ::testing::Test {
  protected:
@@ -56,8 +55,6 @@ std::string quoted(std::string str)
   return dest;
 }
 
-void BytesToHexString(const std::string &bytes, std::string &dest);
-
 std::string to_header_csv(std::vector<crow::Field> fields)
 {
   static char tmp[48];
@@ -73,6 +70,139 @@ std::string to_header_csv(std::vector<crow::Field> fields)
       }
     }
     if (fld.name.length() > 0) { s += fld.name; };
+  }
+  return s;
+}
+
+void renderValue(std::string &s, uint8_t* &p, crow::Field &field)
+{
+  char tmp[64];
+  switch(field.typeId) {
+    case CrowType::TSTRING: {
+      std::string val = std::string(p, p + field.fixedLen);
+      s += val;
+      p += field.fixedLen;
+      break;
+    }
+    case CrowType::TBYTES: {
+      std::string val;
+      BytesToHexString(p, field.fixedLen, val);
+      s += val;
+      p += field.fixedLen;
+      break;
+    }
+    case CrowType::TINT8:
+      snprintf(tmp, sizeof(tmp), "%d", *((int8_t*)p) );
+      s += tmp;
+      p += 1;
+      break;
+    case CrowType::TINT16:
+      snprintf(tmp, sizeof(tmp), "%d", *((int16_t*)p) );
+      s += tmp;
+      p += 2;
+      break;
+    case CrowType::TINT32:
+      snprintf(tmp, sizeof(tmp), "%d", *((int32_t*)p) );
+      s += tmp;
+      p += 4;
+      break;
+    case CrowType::TINT64:
+      snprintf(tmp, sizeof(tmp), "%lld", *((int64_t*)p) );
+      s += tmp;
+      p += 8;
+      break;
+    case CrowType::TUINT8:
+      snprintf(tmp, sizeof(tmp), "%u", *((uint8_t*)p) );
+      s += tmp;
+      p += 1;
+      break;
+    case CrowType::TUINT16:
+      snprintf(tmp, sizeof(tmp), "%u", *((uint16_t*)p) );
+      s += tmp;
+      p += 2;
+      break;
+    case CrowType::TUINT32:
+      snprintf(tmp, sizeof(tmp), "%u", *((uint32_t*)p) );
+      s += tmp;
+      p += 4;
+      break;
+    case CrowType::TUINT64:
+      snprintf(tmp, sizeof(tmp), "%llu", *((uint64_t*)p) );
+      s += tmp;
+      p += 8;
+      break;
+    case CrowType::TFLOAT32:
+      snprintf(tmp, sizeof(tmp), "%.3f", *((float*)p) );
+      s += tmp;
+      p += 4;
+      break;
+    case CrowType::TFLOAT64:
+      snprintf(tmp, sizeof(tmp), "%.3f", *((double*)p) );
+      s += tmp;
+      p += 8;
+      break;
+
+    default: {
+      throw new std::runtime_error("unknown type");
+    }
+  }
+
+}
+std::string to_csv(std::vector<crow::GenDecRow> &rows,
+    std::vector< std::vector<uint8_t> > &rowStructs,
+                   std::vector<crow::Field> fields)
+{
+  static char tmp[48];
+  std::string s;
+  auto structRow = rowStructs.begin();
+  auto row = rows.begin();
+  while(true) {
+    int numProcessed = 0;
+    if (structRow != rowStructs.end()) {
+      numProcessed++;
+      auto p = structRow->data();
+      auto end = p + structRow->size();
+      int i=-1;
+      for (auto &field : fields) {
+        if (!field.isRaw) break;
+        if (p >= end) break;
+        i++;
+        if (i > 0) s += ",";
+
+        renderValue(s, p, field);
+      }
+      structRow++;
+    }
+
+    // TODO: clean this mess up. no guarantee variable row data with structs
+
+    if (row != rows.end()) {
+      numProcessed++;
+      for (auto it = row->begin(); it != row->end(); it++) {
+        auto &col = it->second;
+        if (col.fieldIndex > 0) s += ",";
+        if (col.typeId == CrowType::TSTRING && needs_quotes(col.strval)) {
+          s += quoted(col.strval);
+        } else if (col.typeId == CrowType::TBYTES) {
+          std::string hex;
+          BytesToHexString(col.strval, hex);
+          s += hex;
+        } else {
+          s += col.strval;
+        }
+        if (col.flags > 0) {
+          sprintf(tmp," FLAGS:%x", col.flags);
+          s += tmp;
+        }
+        //sprintf(tmp, " (type:%d)", col.typeId);
+        //s += tmp;
+      }
+
+      row++;
+    }
+
+    if (numProcessed == 0) { break; }
+    s += "||";
   }
   return s;
 }

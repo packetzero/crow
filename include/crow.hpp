@@ -87,6 +87,24 @@ namespace crow {
   inline CrowType type_for(const uint8_t * val) { return TBYTES; }
   inline CrowType type_for(const std::vector<uint8_t>& value) { return TBYTES; }
 
+  inline size_t byte_size(CrowType typeId)
+  {
+    switch(typeId) {
+      case TINT8: return 1;
+      case TUINT8: return 1;
+      case TINT16: return 2;
+      case TUINT16: return 2;
+      case TINT32: return 4;
+      case TUINT32: return 4;
+      case TINT64: return 8;
+      case TUINT64: return 8;
+      case TFLOAT32: return 4;
+      case TFLOAT64: return 8;
+      default:
+      return 0;
+    }
+  }
+
 }
 
 #include "crow/crow_encode.hpp"

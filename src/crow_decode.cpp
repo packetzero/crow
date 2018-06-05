@@ -56,7 +56,8 @@ namespace crow {
      */
     DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _data(pEncData, encLength), _fields(), _err(0), _typemask(0L),
       _errOffset(0L), _setId(0L), _mapSets(),
-      _byteCount(encLength), _flags(0), _numRows(0) {
+      _byteCount(encLength), _flags(0), _numRows(0),
+      _structFields(), _structLen(0) {
     }
 
     ~DecoderImpl() {
@@ -111,6 +112,29 @@ namespace crow {
           if (_numRows > 0) { listener.onRowEnd(); }
 
           _flags = (tagbyte >> 4) & 0x07;
+          listener.onRowStart();
+          if (_structLen > 0) {
+            auto structPtr = data.ptr;
+            if (data.remaining() < _structLen) {
+              throw new std::runtime_error("no more data, trying to read struct");
+            }
+            data.ptr += _structLen;
+            // read struct
+            size_t varlen = 0;
+            if (_fields.size() > _structFields.size()) {
+              // read length of variable length section
+              varlen = readVarInt(data);
+              if (varlen > data.remaining()) {
+                throw new std::runtime_error("length of variable fields extends past end");
+              }
+            }
+            
+            int rv = listener.onStruct(structPtr, _structLen);
+            if (rv == RV_SKIP_VARIABLE_FIELDS) {
+              data.ptr += varlen;
+            }
+          }
+
           break;
 
         } else if (tagid == TFLAGS) {
@@ -134,6 +158,7 @@ namespace crow {
 
       bool has_subid = (tagbyte & FIELDINFO_FLAG_HAS_SUBID) != 0;
       bool has_name = (tagbyte & FIELDINFO_FLAG_HAS_NAME) != 0;
+      bool isRaw = (tagbyte & FIELDINFO_FLAG_RAW) != 0;
 
       if (data.remaining() < 2) {
         _markError(ENOSPC, data);
@@ -150,13 +175,19 @@ namespace crow {
 
       uint8_t typeId = *data.ptr++ & 0x0F;
 
-      // TODO : check valid typeid
+      // sanity check typeId
+
+      if (typeId == CrowType::NONE || typeId >= CrowType::NUM_TYPES) {
+        _markError(EINVAL, data);
+        throw new std::runtime_error("invalid typeId");
+      }
 
       uint32_t id = readVarInt(data);
       uint32_t subid = 0;
       std::string name = std::string();
 
-      // TODO: check err
+      // check for err
+      if (_err > 0) return 0L;
 
       if (has_subid) {
         subid = readVarInt(data);
@@ -171,6 +202,14 @@ namespace crow {
         name = std::string(reinterpret_cast<char const*>(data.ptr), namelen);
         data.ptr += namelen;
       }
+
+      uint32_t fixedLen = 0;
+      if (isRaw) {
+        if ((CrowType)typeId == CrowType::TSTRING || (CrowType)typeId == CrowType::TBYTES) {
+          fixedLen = readVarInt(data);
+        }
+      }
+
       // TODO: check err
 
       _fields.push_back(Field());
@@ -180,6 +219,13 @@ namespace crow {
       pField->id = id;
       pField->subid = subid;
       pField->name = name;
+      pField->isRaw = isRaw;
+      pField->fixedLen = fixedLen;
+
+      if (pField->isRaw) {
+        _structFields.push_back(*pField);
+        _structLen += (fixedLen > 0 ? fixedLen : byte_size(pField->typeId));
+      }
 
       return pField;
     }
@@ -344,6 +390,8 @@ namespace crow {
     size_t         _byteCount;
     uint8_t        _flags;
     uint32_t       _numRows;
+    std::vector<Field> _structFields;
+    size_t         _structLen;
 
     uint64_t readVarInt(PData &data) {
       uint64_t value = 0L;

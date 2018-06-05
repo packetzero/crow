@@ -16,25 +16,6 @@ static const uint8_t UPPER_BIT = (uint8_t)0x80;
 
 namespace crow {
 
-  size_t byte_size(CrowType typeId)
-  {
-    switch(typeId) {
-      case TINT8: return 1;
-      case TUINT8: return 1;
-      case TINT16: return 2;
-      case TUINT16: return 2;
-      case TINT32: return 4;
-      case TUINT32: return 4;
-      case TINT64: return 8;
-      case TUINT64: return 8;
-      case TFLOAT32: return 4;
-      case TFLOAT64: return 8;
-      default:
-      printf("CrowType.byte_size(%d) unknown for type", typeId);
-      return 0;
-    }
-  }
-
   class EncoderImpl : public Encoder {
   public:
     EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity),
@@ -186,7 +167,7 @@ namespace crow {
       }
 
       // write variable fields
-      
+
       if (_dataStack.GetSize() > 0) {
 
         // write TROW, but only if we don't have struct data defined
@@ -221,8 +202,16 @@ namespace crow {
     }
 
     virtual int struct_hdr(CrowType typeId, uint32_t id, uint32_t subid = 0, std::string name = "", int fixedLength = 0) override {
-      // TODO: validate typeId, fixedLength for string,bytes
-      // TODO: once first row with struct has been written, can't be changed
+
+      // check typeId, fixedLength
+
+      if (typeId == 0 || typeId >= CrowType::NUM_TYPES) {
+        return -1;
+      }
+      if (fixedLength == 0 && (typeId == CrowType::TSTRING || typeId == CrowType::TBYTES)) {
+        return -2;
+      }
+
       if (_structDefFinalized) {
         throw new std::invalid_argument("Trying to add struct field after first struct row finalized");
       }

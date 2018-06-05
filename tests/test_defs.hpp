@@ -2,7 +2,7 @@
 #define _TEST_DEFS_HPP_
 
 
-#define ENC_GTEST_LOG_ENABLED 0
+#define ENC_GTEST_LOG_ENABLED 1
 
 enum MY_FIELDS {
   MY_FIELD_A = 2,
@@ -31,5 +31,13 @@ void BytesToHexString(const unsigned char *bytes, size_t len, std::string &dest)
 void BytesToHexString(const Bytes &vec, std::string &dest);
 void BytesToHexString(const std::string &bytes, std::string &dest);
 
+void HexStringToVec(const std::string str, Bytes &dest);
+void BytesToHexString(const std::string &bytes, std::string &dest);
+
+std::string to_header_csv(std::vector<crow::Field> fields);
+std::string to_csv(std::vector<crow::GenDecRow> &rows);
+std::string to_csv(std::vector<crow::GenDecRow> &rows,
+                   std::vector< std::vector<uint8_t> > &rowStructs,
+                   std::vector<crow::Field> fields);
 
 #endif // _TEST_DEFS_HPP_
