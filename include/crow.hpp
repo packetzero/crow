@@ -110,4 +110,7 @@ namespace crow {
 #include "crow/crow_encode.hpp"
 #include "crow/crow_decode.hpp"
 
+#include "crow_private/crow_encode_impl.hpp"
+#include "crow_private/crow_decode_impl.hpp"
+
 #endif // _CROW_HPP_

@@ -255,7 +255,7 @@ TEST_F(DecTest, decodesUsingFieldNames) {
   HexStringToVec("43000100046e616d6543010200036167654302090006616374697665058003626f62812e82010580056a65727279817482000580056c696e646181428201", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
@@ -270,7 +270,7 @@ TEST_F(DecTest, decodesFloats) {
   HexStringToVec("03000b0203010a36058066660afbe45ae6418179e9f642058066660afbe45ae6418179e9f642", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
@@ -285,7 +285,7 @@ TEST_F(DecTest, decodesUsingFieldId) {
   HexStringToVec("0300010203010236030209660580054c61727279812e82010580034d6f65817c8200", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
@@ -300,7 +300,7 @@ TEST_F(DecTest, decodesBytes) {
   HexStringToVec("03000c020580040badcafe0580040badcafe", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
@@ -315,7 +315,7 @@ TEST_F(DecTest, decodesFlags) {
   HexStringToVec("0300030205800305178004058005", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
@@ -330,7 +330,7 @@ TEST_F(DecTest, decodesSet) {
   HexStringToVec("01000102054c617272791101023611020966040004812e820105000380034d6f653500", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
@@ -346,7 +346,7 @@ TEST_F(DecTest, decodeSubids) {
   HexStringToVec("0300030123010301e0d702058022814c05803a811b", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
@@ -362,7 +362,7 @@ TEST_F(DecTest, empty) {
   auto vec = std::vector<uint8_t>();
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   pDec->decode(dl);
 
   ASSERT_EQ(0, dl._rows.size());

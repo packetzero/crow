@@ -11,7 +11,7 @@ class EncStructTest : public ::testing::Test {
 
 TEST_F(EncStructTest, encodesStructAndVariable)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -80,7 +80,7 @@ TEST_F(EncStructTest, encodesStructAndVariable)
 
 TEST_F(EncStructTest, encStructFirst)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   Person person = Person();
@@ -102,7 +102,7 @@ TEST_F(EncStructTest, encStructFirst)
 
 TEST_F(EncStructTest, invalidStructSize)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   Person person = Person();
@@ -123,7 +123,7 @@ TEST_F(EncStructTest, invalidStructSize)
 
 TEST_F(EncStructTest, encodesStruct)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";

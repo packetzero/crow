@@ -1,7 +1,10 @@
+#ifndef _CROW_DECODE_IMPL_HPP_
+#define _CROW_DECODE_IMPL_HPP_
+
 #include <map>
 #include <errno.h>
 
-#include "../include/crow.hpp"
+#include "../crow.hpp"
 #include "stack.hpp"
 #include "protobuf_wire_format.h"
 
@@ -11,8 +14,6 @@
 #define MAX_FIELDS   72    // ridiculously wide table
 
 #define MAX_SANE_SET_SIZE 32000000 // 32 MB should be plenty
-
-static const uint8_t UPPER_BIT = (uint8_t)0x80;
 
 namespace crow {
 
@@ -93,7 +94,7 @@ namespace crow {
         uint8_t tagbyte;
         if (data.empty()) { _markError(ENOSPC, data); return true; }
         tagbyte = *data.ptr++;
-        bool isIndex = (tagbyte & UPPER_BIT) != 0;
+        bool isIndex = (tagbyte & (uint8_t)0x80) != 0;
         uint8_t tagid = tagbyte & 0x0F;
 
         if (isIndex) {
@@ -128,7 +129,7 @@ namespace crow {
                 throw new std::runtime_error("length of variable fields extends past end");
               }
             }
-            
+
             int rv = listener.onStruct(structPtr, _structLen);
             if (rv == RV_SKIP_VARIABLE_FIELDS) {
               data.ptr += varlen;
@@ -409,6 +410,11 @@ namespace crow {
 
   };
 
-  Decoder* DecoderNew(const uint8_t* pEncData, size_t encLength) { return new DecoderImpl(pEncData, encLength); }
+  class DecoderFactory {
+  public:
+    static Decoder* New(const uint8_t* pEncData, size_t encLength) { return new DecoderImpl(pEncData, encLength); }
+  };
 
 }
+
+#endif // _CROW_DECODE_IMPL_HPP_

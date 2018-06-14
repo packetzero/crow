@@ -1,8 +1,10 @@
+#ifndef _CROW_ENCODE_IMPL_HPP_
+#define _CROW_ENCODE_IMPL_HPP_
 #include <map>
 #include <errno.h>
 #include <stdexcept>
 
-#include "../include/crow.hpp"
+#include "../crow.hpp"
 #include "stack.hpp"
 #include "protobuf_wire_format.h"
 
@@ -11,12 +13,10 @@
 #define MAX_NAME_LEN 64
 #define MAX_FIELDS   72    // ridiculously wide table
 
-
-static const uint8_t UPPER_BIT = (uint8_t)0x80;
-
 namespace crow {
 
   class EncoderImpl : public Encoder {
+    static const uint8_t UPPER_BIT = (uint8_t)0x80;
   public:
     EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity),
           _dataStack(1024), _hdrStack(1024), _fields(),
@@ -367,6 +367,10 @@ namespace crow {
     Stack _structBuf;
   };
 
-  Encoder* EncoderNew(size_t initialCapacity) { return new EncoderImpl(initialCapacity); }
+  class EncoderFactory {
+  public:
+    static Encoder* New(size_t initialCapacity = 4096) { return new EncoderImpl(initialCapacity); }
+  };
 
 }
+#endif // _CROW_ENCODE_IMPL_HPP_

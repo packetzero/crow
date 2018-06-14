@@ -226,8 +226,6 @@ namespace crow {
     virtual ~Encoder() {}
   };
 
-  Encoder* EncoderNew(size_t initialCapacity = 4096);
-
 }
 
 #endif // _CROW_HPP_

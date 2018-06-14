@@ -12,7 +12,7 @@ class EncTest : public ::testing::Test {
 
 
 TEST_F(EncTest, withColumnNames) {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -55,7 +55,7 @@ TEST_F(EncTest, withColumnNames) {
 
 TEST_F(EncTest, encodeFloats)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -90,7 +90,7 @@ TEST_F(EncTest, encodeFloats)
 
 TEST_F(EncTest, encodesUsingFieldId)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -124,7 +124,7 @@ TEST_F(EncTest, encodesUsingFieldId)
 
 TEST_F(EncTest, encodesOutOfOrder)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -161,7 +161,7 @@ TEST_F(EncTest, encodesOutOfOrder)
 
 TEST_F(EncTest, encodesSparse)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -202,7 +202,7 @@ TEST_F(EncTest, encodesSparse)
 /*
 TEST_F(EncTest, encodesSet)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -234,7 +234,7 @@ TEST_F(EncTest, encodesSet)
 */
 TEST_F(EncTest, encodesSubids)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";

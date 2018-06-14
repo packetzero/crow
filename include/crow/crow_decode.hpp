@@ -70,8 +70,6 @@ namespace crow {
     virtual std::vector<Field> getFields() = 0;
   };
 
-  Decoder* DecoderNew(const uint8_t* pEncData, size_t encLength);
-
   /* struct to encapsulate any decoded column value.  Used by GenericDecoderListener */
 
   struct DecColValue {

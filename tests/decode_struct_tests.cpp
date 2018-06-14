@@ -15,7 +15,7 @@ TEST_F(DecStructTest, decodeStruct)
   HexStringToVec("1300020a1301090b1302010c03051700000001426f62053e000000004d6f65", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   auto numRows = dec.decode(dl);
   ASSERT_EQ(2, numRows);
@@ -34,7 +34,7 @@ TEST_F(DecStructTest, decodeStructAndVariable)
   HexStringToVec("1300020a1301090b1302010c0343030100046e616d65051700000001426f62048302626f053e000000004d6f65068304626f626f053e000000004d6f6500", vec);
 
   auto dl = crow::GenericDecoderListener();
-  auto pDec = crow::DecoderNew(vec.data(), vec.size());
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   auto numRows = dec.decode(dl);
   ASSERT_EQ(3, numRows);
