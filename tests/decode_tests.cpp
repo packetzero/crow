@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "../include/crow.hpp"
-
+#include "test_defs.hpp"
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
@@ -8,7 +8,6 @@ int main(int argc, char **argv) {
   return status;
 }
 
-void HexStringToVec(const std::string str, Bytes &dest);
 
 class DecTest : public ::testing::Test {
  protected:
@@ -56,8 +55,6 @@ std::string quoted(std::string str)
   return dest;
 }
 
-void BytesToHexString(const std::string &bytes, std::string &dest);
-
 std::string to_header_csv(std::vector<crow::Field> fields)
 {
   static char tmp[48];
@@ -73,6 +70,139 @@ std::string to_header_csv(std::vector<crow::Field> fields)
       }
     }
     if (fld.name.length() > 0) { s += fld.name; };
+  }
+  return s;
+}
+
+void renderValue(std::string &s, uint8_t* &p, crow::Field &field)
+{
+  char tmp[64];
+  switch(field.typeId) {
+    case CrowType::TSTRING: {
+      std::string val = std::string(p, p + field.fixedLen);
+      s += val;
+      p += field.fixedLen;
+      break;
+    }
+    case CrowType::TBYTES: {
+      std::string val;
+      BytesToHexString(p, field.fixedLen, val);
+      s += val;
+      p += field.fixedLen;
+      break;
+    }
+    case CrowType::TINT8:
+      snprintf(tmp, sizeof(tmp), "%d", *((int8_t*)p) );
+      s += tmp;
+      p += 1;
+      break;
+    case CrowType::TINT16:
+      snprintf(tmp, sizeof(tmp), "%d", *((int16_t*)p) );
+      s += tmp;
+      p += 2;
+      break;
+    case CrowType::TINT32:
+      snprintf(tmp, sizeof(tmp), "%d", *((int32_t*)p) );
+      s += tmp;
+      p += 4;
+      break;
+    case CrowType::TINT64:
+      snprintf(tmp, sizeof(tmp), "%lld", *((int64_t*)p) );
+      s += tmp;
+      p += 8;
+      break;
+    case CrowType::TUINT8:
+      snprintf(tmp, sizeof(tmp), "%u", *((uint8_t*)p) );
+      s += tmp;
+      p += 1;
+      break;
+    case CrowType::TUINT16:
+      snprintf(tmp, sizeof(tmp), "%u", *((uint16_t*)p) );
+      s += tmp;
+      p += 2;
+      break;
+    case CrowType::TUINT32:
+      snprintf(tmp, sizeof(tmp), "%u", *((uint32_t*)p) );
+      s += tmp;
+      p += 4;
+      break;
+    case CrowType::TUINT64:
+      snprintf(tmp, sizeof(tmp), "%llu", *((uint64_t*)p) );
+      s += tmp;
+      p += 8;
+      break;
+    case CrowType::TFLOAT32:
+      snprintf(tmp, sizeof(tmp), "%.3f", *((float*)p) );
+      s += tmp;
+      p += 4;
+      break;
+    case CrowType::TFLOAT64:
+      snprintf(tmp, sizeof(tmp), "%.3f", *((double*)p) );
+      s += tmp;
+      p += 8;
+      break;
+
+    default: {
+      throw new std::runtime_error("unknown type");
+    }
+  }
+
+}
+std::string to_csv(std::vector<crow::GenDecRow> &rows,
+    std::vector< std::vector<uint8_t> > &rowStructs,
+                   std::vector<crow::Field> fields)
+{
+  static char tmp[48];
+  std::string s;
+  auto structRow = rowStructs.begin();
+  auto row = rows.begin();
+  while(true) {
+    int numProcessed = 0;
+    if (structRow != rowStructs.end()) {
+      numProcessed++;
+      auto p = structRow->data();
+      auto end = p + structRow->size();
+      int i=-1;
+      for (auto &field : fields) {
+        if (!field.isRaw) break;
+        if (p >= end) break;
+        i++;
+        if (i > 0) s += ",";
+
+        renderValue(s, p, field);
+      }
+      structRow++;
+    }
+
+    // TODO: clean this mess up. no guarantee variable row data with structs
+
+    if (row != rows.end()) {
+      numProcessed++;
+      for (auto it = row->begin(); it != row->end(); it++) {
+        auto &col = it->second;
+        if (col.fieldIndex > 0) s += ",";
+        if (col.typeId == CrowType::TSTRING && needs_quotes(col.strval)) {
+          s += quoted(col.strval);
+        } else if (col.typeId == CrowType::TBYTES) {
+          std::string hex;
+          BytesToHexString(col.strval, hex);
+          s += hex;
+        } else {
+          s += col.strval;
+        }
+        if (col.flags > 0) {
+          sprintf(tmp," FLAGS:%x", col.flags);
+          s += tmp;
+        }
+        //sprintf(tmp, " (type:%d)", col.typeId);
+        //s += tmp;
+      }
+
+      row++;
+    }
+
+    if (numProcessed == 0) { break; }
+    s += "||";
   }
   return s;
 }
@@ -122,7 +252,7 @@ std::string _typeName(CrowType ft) {
 
 TEST_F(DecTest, decodesUsingFieldNames) {
   auto vec = std::vector<uint8_t>();
-  HexStringToVec("41000100046e616d6503626f6241010200036167652e4102090006616374697665010380056a65727279817482000380056c696e646181428201", vec);
+  HexStringToVec("43000100046e616d6543010200036167654302090006616374697665058003626f62812e82010580056a65727279817482000580056c696e646181428201", vec);
 
   auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
@@ -137,7 +267,7 @@ TEST_F(DecTest, decodesUsingFieldNames) {
 
 TEST_F(DecTest, decodesFloats) {
   auto vec = std::vector<uint8_t>();
-  HexStringToVec("01000b0266660afbe45ae64101010a3679e9f642038066660afbe45ae6418179e9f642", vec);
+  HexStringToVec("03000b0203010a36058066660afbe45ae6418179e9f642058066660afbe45ae6418179e9f642", vec);
 
   auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
@@ -152,7 +282,7 @@ TEST_F(DecTest, decodesFloats) {
 
 TEST_F(DecTest, decodesUsingFieldId) {
   auto vec = std::vector<uint8_t>();
-  HexStringToVec("01000102054c61727279010102362e01020966010380034d6f65817c820003", vec);
+  HexStringToVec("0300010203010236030209660580054c61727279812e82010580034d6f65817c8200", vec);
 
   auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
@@ -167,7 +297,7 @@ TEST_F(DecTest, decodesUsingFieldId) {
 
 TEST_F(DecTest, decodesBytes) {
   auto vec = std::vector<uint8_t>();
-  HexStringToVec("01000c02040badcafe0380040badcafe", vec);
+  HexStringToVec("03000c020580040badcafe0580040badcafe", vec);
 
   auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
@@ -182,7 +312,7 @@ TEST_F(DecTest, decodesBytes) {
 
 TEST_F(DecTest, decodesFlags) {
   auto vec = std::vector<uint8_t>();
-  HexStringToVec("010003020303168004038005", vec);
+  HexStringToVec("0300030205800305178004058005", vec);
 
   auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
@@ -194,7 +324,7 @@ TEST_F(DecTest, decodesFlags) {
 
   delete pDec;
 }
-
+/*
 TEST_F(DecTest, decodesSet) {
   auto vec = std::vector<uint8_t>();
   HexStringToVec("01000102054c617272791101023611020966040004812e820105000380034d6f653500", vec);
@@ -209,10 +339,11 @@ TEST_F(DecTest, decodesSet) {
 
   delete pDec;
 }
+*/
 
 TEST_F(DecTest, decodeSubids) {
   auto vec = std::vector<uint8_t>();
-  HexStringToVec("010003012221010301e0d7024c03803a811b", vec);
+  HexStringToVec("0300030123010301e0d702058022814c05803a811b", vec);
 
   auto dl = crow::GenericDecoderListener();
   auto pDec = crow::DecoderNew(vec.data(), vec.size());
