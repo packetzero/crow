@@ -80,6 +80,8 @@ namespace crow {
         _numRows++;
       }
 
+      if (_numRows > 0) { listener.onRowEnd(); }
+
       return _numRows;
     }
 
@@ -99,7 +101,7 @@ namespace crow {
 
         if (isIndex) {
 
-          uint8_t index = tagid & (uint8_t)0x7F;
+          uint8_t index = tagbyte & (uint8_t)0x7F;
           if (index >= _fields.size()) {
             _markError(EINVAL, data); return true;
           }
