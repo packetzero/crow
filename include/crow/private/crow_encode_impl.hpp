@@ -3,6 +3,7 @@
 #include <map>
 #include <errno.h>
 #include <stdexcept>
+#include <unistd.h>
 
 #include "../../crow.hpp"
 #include "stack.hpp"
@@ -139,7 +140,7 @@ namespace crow {
       writeVarInt(value, staq());
     }
 
-    void _flush() {
+    void _flush(int fd = 0) {
       // flush header
       if (_hdrStack.GetSize() > 0) {
         // copy data
@@ -180,6 +181,11 @@ namespace crow {
         _dataStack.Clear();
       }
       _haveStructData = false;
+
+      if (fd > 0) {
+        write(fd, (const void *)_stack.Bottom(), _stack.GetSize());
+        _stack.Clear();
+      }
     }
 
     virtual void startRow() override {
@@ -189,6 +195,13 @@ namespace crow {
     virtual void flush() const override {
       ((EncoderImpl*)this)->_flush();
     }
+    virtual void flush(int fd) override {
+      _flush(fd);
+    }
+    virtual void endRow(int fd) override {
+      if (fd > 0) _flush(fd);
+    }
+
 
     const uint8_t* data() const override { flush(); return _stack.Bottom(); }
 
@@ -220,7 +233,7 @@ namespace crow {
         throw new std::invalid_argument("All struct columns must come before variable columns");
       }
 
-      Field *pField = fieldFor(typeId, id, subid);
+      Field *pField = (name.empty() ? fieldFor(typeId, id, subid) : fieldFor(typeId, name));
       pField->name = name;
       pField->isRaw = true;
       pField->fixedLen = fixedLength;
@@ -248,7 +261,7 @@ namespace crow {
         _structBuf.Push(_structLen);
       }
 
-      startRow();
+      //startRow();
 
       memcpy(_structBuf.Bottom(), data, _structLen);
       _haveStructData = true;
