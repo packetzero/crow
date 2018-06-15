@@ -14,6 +14,29 @@
 #define MAX_NAME_LEN 64
 #define MAX_FIELDS   72    // ridiculously wide table
 
+#define PUT_CONVERT(pField, value) { \
+  switch(pField->typeId) { \
+  case TFLOAT64: \
+    return put(pField, (double)value); \
+  case TFLOAT32: \
+    return put(pField, (float)value); \
+  case TINT32: \
+    return put(pField, (int32_t)value); \
+  case TUINT32: \
+    return put(pField, (uint32_t)value); \
+  case TUINT8: \
+    return put(pField, (uint8_t)value); \
+  case TINT8: \
+    return put(pField, (int8_t)value); \
+  case TUINT64: \
+    return put(pField, (uint64_t)value); \
+  case TINT64: \
+    return put(pField, (int64_t)value); \
+  default: \
+    return; \
+  } \
+}
+
 namespace crow {
 
   class EncoderImpl : public Encoder {
@@ -60,31 +83,49 @@ namespace crow {
 
     void put(const Field *pField, int32_t value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TINT32) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeVarInt(ZigZagEncode32(value), staq());
     }
     void put(const Field *pField, uint32_t value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TUINT32) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeVarInt(value, staq());
     }
     void put(const Field *pField, int64_t value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TINT64) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeVarInt(ZigZagEncode64(value), staq());
     }
     void put(const Field *pField, uint64_t value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TUINT64) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
      writeVarInt(value, staq());
     }
     void put(const Field *pField, double value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TFLOAT64) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeFixed64(EncodeDouble(value), staq());
     }
     void put(const Field *pField, float value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TFLOAT32) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeFixed32(EncodeFloat(value), staq());
     }
