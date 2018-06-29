@@ -24,16 +24,22 @@ enum CrowTag {
   the tagid byte has following scenarios:
 
   1nnn nnnn    Upper bit set - lower 7 bits contain index of field, value bytes follow
-  000F 0001    TFIELDINFO, if bit 4 set, no value follows definition
+  0FFF 0001    TFIELDINFO, FIELDINFO_FLAG_XX apply
   0FFF 0110    TFLAGS, bits 4-6 contain app specific flags
   0FFF 0011    TROWSEP, bits 4-6 contain app specific flags
   0FFF 0101    TSETREF, bits 4-6 contain app specific flags
+  0FFF 0010    TTABLE, TABLE_FLAG_XX apply
   0000 TTTT    Tagid in bits 0-3
 */
 
 #define FIELDINFO_FLAG_RAW  (uint8_t)0x10
 #define FIELDINFO_FLAG_HAS_SUBID (uint8_t)0x20
 #define FIELDINFO_FLAG_HAS_NAME  (uint8_t)0x40
+
+// Table flags
+// DECORATE: this table defines context / decorator fields that apply to tables in this block
+
+#define TABLE_FLAG_DECORATE  (uint8_t)0x10
 
 enum CrowType {
     NONE,

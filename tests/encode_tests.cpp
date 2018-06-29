@@ -260,6 +260,60 @@ TEST_F(EncTest, encodesSubids)
   delete pEnc;
 }
 
+// this is based on withColumnNames test, but adding a couple of decorator fields
+TEST_F(EncTest, decorators) {
+  auto pEnc = crow::EncoderFactory::New();
+  auto &enc = *pEnc;
+  
+  std::string s = "";
+  
+  enc.startTable(TABLE_FLAG_DECORATE);   s += "12";
+
+  enc["date"] = "20180502";         s += "430001000464617465";
+  enc["domain"] = 23;               s += "4301020006646f6d61696e";
+
+  s += "05";
+  s += "80083230313830353032";
+  s += "812e";
+
+  enc.startTable();            s += "02";
+  
+  enc["name"] = "bob";         s += "43000100046e616d65";
+  enc["age"] = 23;             s += "4301020003616765";
+  enc["active"] = true;        s += "4302090006616374697665";
+  
+  // row data
+  s += "05";
+  s += "8003626f62";
+  s += "812e";
+  s += "8201";
+  
+  enc.startRow();                   s += "05";
+  
+  enc["name"] = "jerry";    s += "80056a65727279";
+  enc["age"] = 58 ;        s += "8174";
+  enc["active"] = false;   s += "8200";
+  enc.startRow();                   s += "05";
+  
+  enc["name"] = "linda";   s += "80056c696e6461";
+  enc["age"] = 33 ;        s += "8142";
+  enc["active"] = true;    s += "8201";
+  enc.flush();
+  
+  const uint8_t* result = enc.data();
+  
+  std::string actual;
+  BytesToHexString(result, enc.size(), actual);
+  
+  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
+  
+  ASSERT_EQ(s, actual);
+  
+  delete pEnc;
+}
+
+
+
 static const char hexCharsLower[] = {
   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
 };

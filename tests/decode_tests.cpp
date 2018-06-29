@@ -235,20 +235,6 @@ std::string to_csv(std::vector<crow::GenDecRow> &rows)
   }
   return s;
 }
-/*
-std::string _typeName(CrowType ft) {
-  switch(ft) {
-    case TINT32: return "int32";
-    case TUINT32: return "uint32";
-    case TINT64: return "int64";
-    case TUINT64: return "uint64";
-    case TFLOAT64: return "double";
-    default:
-      break;
-  }
-  return "";
-}
-*/
 
 TEST_F(DecTest, decodesUsingFieldNames) {
   auto vec = std::vector<uint8_t>();
@@ -366,6 +352,23 @@ TEST_F(DecTest, empty) {
   pDec->decode(dl);
 
   ASSERT_EQ(0, dl._rows.size());
+
+  delete pDec;
+}
+
+TEST_F(DecTest, decorators) {
+  auto vec = std::vector<uint8_t>();
+  HexStringToVec("124300010004646174654301020006646f6d61696e0580083230313830353032812e0243000100046e616d6543010200036167654302090006616374697665058003626f62812e82010580056a65727279817482000580056c696e646181428201", vec);
+
+  auto dl = crow::GenericDecoderListener();
+  auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
+  auto &dec = *pDec;
+  dec.decode(dl);
+  std::string actual = to_csv(dl._rows);
+  std::string headers = to_header_csv(pDec->getFields());
+
+  ASSERT_EQ("bob,23,1,20180502,23||jerry,58,0,20180502,23||linda,33,1,20180502,23||", actual);
+  ASSERT_EQ("name,age,active,date,domain", headers);
 
   delete pDec;
 }

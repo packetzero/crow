@@ -214,9 +214,9 @@ namespace crow {
       put(fieldFor(crow::type_for(value), name), value);
     }
 
-//    virtual void put_def(const Field *pField) = 0;
-
     virtual void startRow() = 0;
+
+    virtual void startTable(int flags = 0) = 0;
 
     /*
      * Call at end of data to flush encoding buffers.

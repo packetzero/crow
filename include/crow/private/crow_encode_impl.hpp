@@ -233,6 +233,15 @@ namespace crow {
       _flush();
     }
 
+    virtual void startTable(int flags) override {
+      _flush();
+      uint8_t tagid = TTABLE | ((uint8_t)flags & 0x70);
+      auto p = _hdrStack.Push(1);
+      *p = tagid;
+      _fields.clear();
+      _structFields.clear();
+    }
+
     virtual void flush() const override {
       ((EncoderImpl*)this)->_flush();
     }
