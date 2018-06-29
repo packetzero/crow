@@ -214,10 +214,20 @@ namespace crow {
       put(fieldFor(crow::type_for(value), name), value);
     }
 
-//    virtual void put_def(const Field *pField) = 0;
-
     virtual void startRow() = 0;
+
+    virtual void startTable(int flags = 0) = 0;
+
+    /*
+     * Call at end of data to flush encoding buffers.
+     */
     virtual void flush() const = 0;
+    virtual void flush(int fd) = 0;
+
+    /*
+     * Call at end of row.  If fd > 0, will flush buffers to file.
+     */
+    virtual void endRow(int fd = 0) = 0;
 
     virtual const uint8_t* data() const = 0;
     virtual size_t size() const = 0;
@@ -225,8 +235,6 @@ namespace crow {
 
     virtual ~Encoder() {}
   };
-
-  Encoder* EncoderNew(size_t initialCapacity = 4096);
 
 }
 

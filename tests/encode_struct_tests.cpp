@@ -11,7 +11,7 @@ class EncStructTest : public ::testing::Test {
 
 TEST_F(EncStructTest, encodesStructAndVariable)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -80,7 +80,7 @@ TEST_F(EncStructTest, encodesStructAndVariable)
 
 TEST_F(EncStructTest, encStructFirst)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   Person person = Person();
@@ -102,7 +102,7 @@ TEST_F(EncStructTest, encStructFirst)
 
 TEST_F(EncStructTest, invalidStructSize)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   Person person = Person();
@@ -123,7 +123,7 @@ TEST_F(EncStructTest, invalidStructSize)
 
 TEST_F(EncStructTest, encodesStruct)
 {
-  auto pEnc = crow::EncoderNew();
+  auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
@@ -166,3 +166,49 @@ TEST_F(EncStructTest, encodesStruct)
 
   delete pEnc;
 }
+
+TEST_F(EncStructTest, encodesStructEnd)
+{
+  auto pEnc = crow::EncoderFactory::New();
+  auto &enc = *pEnc;
+ 
+  std::string s = "";
+  Person person = Person();
+
+  enc.struct_hdr(crow::type_for(person.age), "_D");
+  enc.struct_hdr(crow::type_for(person.active), "_V");
+  enc.struct_hdr(crow::type_for(person.name), "_T", sizeof(person.name));
+
+  enc.startRow();
+
+  s += "53000200025f44";
+  s += "53010900025f56";
+  s += "53020100025f5403";
+ 
+  enc["name"] = "bo";         s += "43030100046e616d65";  // field def
+
+  PERSON(person,"Bob", 23, true);
+  enc.put_struct(&person, sizeof(person));
+ 
+  // row data
+ 
+  s += "05";
+  s += "17000000";
+  s += "01";
+  s += "426f62";
+ 
+  s += "04"; // length of variable field section
+  s += "8302626f";
+ 
+  const uint8_t* result = enc.data();
+ 
+  std::string actual;
+  BytesToHexString(result, enc.size(), actual);
+ 
+  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
+ 
+  ASSERT_EQ(s, actual);
+ 
+  delete pEnc;
+}
+

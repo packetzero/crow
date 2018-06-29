@@ -1,8 +1,11 @@
+#ifndef _CROW_ENCODE_IMPL_HPP_
+#define _CROW_ENCODE_IMPL_HPP_
 #include <map>
 #include <errno.h>
 #include <stdexcept>
+#include <unistd.h>
 
-#include "../include/crow.hpp"
+#include "../../crow.hpp"
 #include "stack.hpp"
 #include "protobuf_wire_format.h"
 
@@ -11,12 +14,33 @@
 #define MAX_NAME_LEN 64
 #define MAX_FIELDS   72    // ridiculously wide table
 
-
-static const uint8_t UPPER_BIT = (uint8_t)0x80;
+#define PUT_CONVERT(pField, value) { \
+  switch(pField->typeId) { \
+  case TFLOAT64: \
+    return put(pField, (double)value); \
+  case TFLOAT32: \
+    return put(pField, (float)value); \
+  case TINT32: \
+    return put(pField, (int32_t)value); \
+  case TUINT32: \
+    return put(pField, (uint32_t)value); \
+  case TUINT8: \
+    return put(pField, (uint8_t)value); \
+  case TINT8: \
+    return put(pField, (int8_t)value); \
+  case TUINT64: \
+    return put(pField, (uint64_t)value); \
+  case TINT64: \
+    return put(pField, (int64_t)value); \
+  default: \
+    return; \
+  } \
+}
 
 namespace crow {
 
   class EncoderImpl : public Encoder {
+    static const uint8_t UPPER_BIT = (uint8_t)0x80;
   public:
     EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity),
           _dataStack(1024), _hdrStack(1024), _fields(),
@@ -59,31 +83,49 @@ namespace crow {
 
     void put(const Field *pField, int32_t value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TINT32) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeVarInt(ZigZagEncode32(value), staq());
     }
     void put(const Field *pField, uint32_t value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TUINT32) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeVarInt(value, staq());
     }
     void put(const Field *pField, int64_t value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TINT64) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeVarInt(ZigZagEncode64(value), staq());
     }
     void put(const Field *pField, uint64_t value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TUINT64) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
      writeVarInt(value, staq());
     }
     void put(const Field *pField, double value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TFLOAT64) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeFixed64(EncodeDouble(value), staq());
     }
     void put(const Field *pField, float value) override {
       if (pField == _dummyField()) return;
+      if (pField->typeId != TFLOAT32) {
+        PUT_CONVERT(pField, value);
+      }
       writeIndexTag(pField);
       writeFixed32(EncodeFloat(value), staq());
     }
@@ -139,7 +181,7 @@ namespace crow {
       writeVarInt(value, staq());
     }
 
-    void _flush() {
+    void _flush(int fd = 0) {
       // flush header
       if (_hdrStack.GetSize() > 0) {
         // copy data
@@ -180,15 +222,36 @@ namespace crow {
         _dataStack.Clear();
       }
       _haveStructData = false;
+
+      if (fd > 0) {
+        write(fd, (const void *)_stack.Bottom(), _stack.GetSize());
+        _stack.Clear();
+      }
     }
 
     virtual void startRow() override {
       _flush();
     }
 
+    virtual void startTable(int flags) override {
+      _flush();
+      uint8_t tagid = TTABLE | ((uint8_t)flags & 0x70);
+      auto p = _hdrStack.Push(1);
+      *p = tagid;
+      _fields.clear();
+      _structFields.clear();
+    }
+
     virtual void flush() const override {
       ((EncoderImpl*)this)->_flush();
     }
+    virtual void flush(int fd) override {
+      _flush(fd);
+    }
+    virtual void endRow(int fd) override {
+      if (fd > 0) _flush(fd);
+    }
+
 
     const uint8_t* data() const override { flush(); return _stack.Bottom(); }
 
@@ -220,7 +283,7 @@ namespace crow {
         throw new std::invalid_argument("All struct columns must come before variable columns");
       }
 
-      Field *pField = fieldFor(typeId, id, subid);
+      Field *pField = (name.empty() ? fieldFor(typeId, id, subid) : fieldFor(typeId, name));
       pField->name = name;
       pField->isRaw = true;
       pField->fixedLen = fixedLength;
@@ -248,7 +311,7 @@ namespace crow {
         _structBuf.Push(_structLen);
       }
 
-      startRow();
+      //startRow();
 
       memcpy(_structBuf.Bottom(), data, _structLen);
       _haveStructData = true;
@@ -367,6 +430,10 @@ namespace crow {
     Stack _structBuf;
   };
 
-  Encoder* EncoderNew(size_t initialCapacity) { return new EncoderImpl(initialCapacity); }
+  class EncoderFactory {
+  public:
+    static Encoder* New(size_t initialCapacity = 4096) { return new EncoderImpl(initialCapacity); }
+  };
 
 }
+#endif // _CROW_ENCODE_IMPL_HPP_

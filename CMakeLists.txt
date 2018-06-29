@@ -11,17 +11,16 @@ set(CMAKE_SUPPRESS_REGENERATION "1") # avoid ALL_BUILD targets
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG=1")
 
-file(GLOB HDRS "src/*.h" "include/*.h*" "include/crow/*.h*")
-file(GLOB SRCS "src/*.cpp" "src/*.cc")
-
-add_library (${PROJECT_NAME} ${SRCS} ${HDRS})
-
 if($ENV{MAKE_TESTS})
   file(GLOB TESTSRCS "tests/*.c*")
 
   ADD_EXECUTABLE(crowtests ${TESTSRCS})
-  TARGET_LINK_LIBRARIES(crowtests crow gtest)
+  TARGET_LINK_LIBRARIES(crowtests gtest)
+else()
+  message("===================================")
+  message("NOTE: This is a header-only library")
+  message("===================================")
 endif()
 
-install(TARGETS ${PROJECT_NAME} ARCHIVE DESTINATION lib)
+#install(TARGETS ${PROJECT_NAME} ARCHIVE DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.hpp")
