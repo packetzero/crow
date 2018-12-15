@@ -14,24 +14,24 @@
 #define MAX_NAME_LEN 64
 #define MAX_FIELDS   72    // ridiculously wide table
 
-#define PUT_CONVERT(pField, value) { \
-  switch(pField->typeId) { \
+#define PUT_CONVERT(field, value) { \
+  switch(field->typeId) { \
   case TFLOAT64: \
-    return put(pField, (double)value); \
+    return put(field, (double)value); \
   case TFLOAT32: \
-    return put(pField, (float)value); \
+    return put(field, (float)value); \
   case TINT32: \
-    return put(pField, (int32_t)value); \
+    return put(field, (int32_t)value); \
   case TUINT32: \
-    return put(pField, (uint32_t)value); \
+    return put(field, (uint32_t)value); \
   case TUINT8: \
-    return put(pField, (uint8_t)value); \
+    return put(field, (uint8_t)value); \
   case TINT8: \
-    return put(pField, (int8_t)value); \
+    return put(field, (int8_t)value); \
   case TUINT64: \
-    return put(pField, (uint64_t)value); \
+    return put(field, (uint64_t)value); \
   case TINT64: \
-    return put(pField, (int64_t)value); \
+    return put(field, (int64_t)value); \
   default: \
     return; \
   } \
@@ -45,139 +45,180 @@ namespace crow {
     EncoderImpl(size_t initialCapacity) : Encoder(), _stack(initialCapacity),
           _dataStack(1024), _hdrStack(1024), _fields(),
           _structFields(), _haveStructData(false), _structLen(0),
-          _structDefFinalized(false), _structBuf(0)  {}
+          _structDefFinalized(false), _structBuf(0), _written()  {}
 
     ~EncoderImpl() { }
 
-    Field *fieldFor(CrowType type, uint32_t id, uint32_t subid = 0) override {
+    const SPField fieldFor(CrowType type, uint32_t id, uint32_t subid = 0) override {
+
+      // check for existing
+
       for (int i=0; i < _fields.size(); i++) {
-        Field *pField = &_fields[i];
-        if (pField->id == id && pField->subid == subid) return pField;
+        const SPField field = _fields[i];
+        if (field->id == id && field->subid == subid) return field;
       }
-      Field* p = _newField(type);
-      if (p == _dummyField()) return p;
-
-      p->id = id;
-      p->subid = subid;
-
-      return p;
+      const SPField f = _newField(type, id, subid);
+      return f;
     }
 
-    Field *fieldFor(CrowType type, std::string name) override {
+    const SPField fieldFor(CrowType type, std::string name) override {
+
+      // check for existing
+
       for (int i=0; i < _fields.size(); i++) {
-        Field *pField = &_fields[i];
+        SPField pField = _fields[i];
         if (pField->name == name) return pField;
       }
-      Field* p = _newField(type);
-      if (p == _dummyField()) return p;
-
-      p->name = name;
-
-      return p;
+      const SPField f = _newField(type, name);
+      assert(f && f->typeId != NONE);
+      return f;
     }
 
-    Field* _dummyField() {
-      static Field dummy = { NONE /* type */, 0 /* id */, 9999999, "FIELD_LIMIT_REACHED", 0 /* index */ };
-      return &dummy;
+    // returns SP to field with default initializer (type == NONE)
+    const SPField _dummyField() {
+      const static SPField spdummy = std::make_shared<Field>();
+      return spdummy;
     }
 
-    void put(const Field *pField, int32_t value) override {
-      if (pField == _dummyField()) return;
-      if (pField->typeId != TINT32) {
-        PUT_CONVERT(pField, value);
+    void put(const SPField field, int32_t value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
       }
-      writeIndexTag(pField);
+      if (field->typeId != TINT32) {
+        PUT_CONVERT(field, value);
+      }
+      writeIndexTag(field);
       writeVarInt(ZigZagEncode32(value), staq());
     }
-    void put(const Field *pField, uint32_t value) override {
-      if (pField == _dummyField()) return;
-      if (pField->typeId != TUINT32) {
-        PUT_CONVERT(pField, value);
+    void put(const SPField field, uint32_t value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
       }
-      writeIndexTag(pField);
+      if (field->typeId != TUINT32) {
+        PUT_CONVERT(field, value);
+      }
+      writeIndexTag(field);
       writeVarInt(value, staq());
     }
-    void put(const Field *pField, int64_t value) override {
-      if (pField == _dummyField()) return;
-      if (pField->typeId != TINT64) {
-        PUT_CONVERT(pField, value);
+    void put(const SPField field, int64_t value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
       }
-      writeIndexTag(pField);
+      if (field->typeId != TINT64) {
+        PUT_CONVERT(field, value);
+      }
+      writeIndexTag(field);
       writeVarInt(ZigZagEncode64(value), staq());
     }
-    void put(const Field *pField, uint64_t value) override {
-      if (pField == _dummyField()) return;
-      if (pField->typeId != TUINT64) {
-        PUT_CONVERT(pField, value);
+    void put(const SPField field, uint64_t value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
       }
-      writeIndexTag(pField);
+      if (field->typeId != TUINT64) {
+        PUT_CONVERT(field, value);
+      }
+      writeIndexTag(field);
      writeVarInt(value, staq());
     }
-    void put(const Field *pField, double value) override {
-      if (pField == _dummyField()) return;
-      if (pField->typeId != TFLOAT64) {
-        PUT_CONVERT(pField, value);
+    void put(const SPField field, double value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
       }
-      writeIndexTag(pField);
+      if (field->typeId != TFLOAT64) {
+        PUT_CONVERT(field, value);
+      }
+      writeIndexTag(field);
       writeFixed64(EncodeDouble(value), staq());
     }
-    void put(const Field *pField, float value) override {
-      if (pField == _dummyField()) return;
-      if (pField->typeId != TFLOAT32) {
-        PUT_CONVERT(pField, value);
+    void put(const SPField field, float value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
       }
-      writeIndexTag(pField);
+      if (field->typeId != TFLOAT32) {
+        PUT_CONVERT(field, value);
+      }
+      writeIndexTag(field);
       writeFixed32(EncodeFloat(value), staq());
     }
-    void put(const Field *pField, const std::string value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
+    void put(const SPField field, const std::string value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
+      }
+      writeIndexTag(field);
       writeVarInt(value.length(), staq());
       memcpy(staq().Push(value.length()), value.c_str(), value.length());
     }
-    void put(const Field *pField, const char* str) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
+    void put(const SPField field, const char* str) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
+      }
+      writeIndexTag(field);
       size_t srcLen = strlen(str);
       writeVarInt(srcLen, staq());
       memcpy(staq().Push(srcLen), str, srcLen);
     }
-    void put(const Field *pField, const std::vector<uint8_t>& value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
+    void put(const SPField field, const std::vector<uint8_t>& value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
+      }
+      writeIndexTag(field);
       writeVarInt(value.size(), staq());
       memcpy(staq().Push(value.size()), value.data(), value.size());
     }
-    void put(const Field *pField, const uint8_t* bytes, size_t len) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
+    void put(const SPField field, const uint8_t* bytes, size_t len) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
+      }
+      writeIndexTag(field);
       writeVarInt(len, staq());
       memcpy(staq().Push(len), bytes, len);
     }
-    void put(const Field *pField, bool value) override {
-      put(pField, (value ? (uint8_t)1 : (uint8_t)0));
+    void put(const SPField field, bool value) override {
+      put(field, (value ? (uint8_t)1 : (uint8_t)0));
     }
 
-    virtual void put(const Field *pField, int8_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
+    virtual void put(const SPField field, int8_t value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
+      }
+      writeIndexTag(field);
       uint8_t* ptr = staq().Push(1);
       *ptr = (uint8_t)value;
     }
-    virtual void put(const Field *pField, uint8_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
+    virtual void put(const SPField field, uint8_t value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
+      }
+      writeIndexTag(field);
       uint8_t* ptr = staq().Push(1);
       *ptr = value;
     }
-    virtual void put(const Field *pField, int16_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
+    virtual void put(const SPField field, int16_t value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
+      }
+      writeIndexTag(field);
       writeVarInt(ZigZagEncode32(value), staq());
     }
-    virtual void put(const Field *pField, uint16_t value) override {
-      if (pField == _dummyField()) return;
-      writeIndexTag(pField);
+    virtual void put(const SPField field, uint16_t value) override {
+      if (isInvalid(field)) {
+        assert(false);
+        return;
+      }
+      writeIndexTag(field);
       writeVarInt(value, staq());
     }
 
@@ -283,15 +324,19 @@ namespace crow {
         throw new std::invalid_argument("All struct columns must come before variable columns");
       }
 
-      Field *pField = (name.empty() ? fieldFor(typeId, id, subid) : fieldFor(typeId, name));
-      pField->name = name;
-      pField->isRaw = true;
-      pField->fixedLen = fixedLength;
-      _structFields.push_back(*pField);
+      for (int i=0; i < _fields.size(); i++) {
+        const SPField field = _fields[i];
+        if (field->id == id && field->subid == subid && field->name == name) {
+          return -3;
+        }
+      }
+
+      const SPField field = _newStructField(typeId, name, id, subid, fixedLength);
+      _structFields.push_back(field);
 
       _structLen += (fixedLength > 0 ? fixedLength : byte_size(typeId));
 
-      writeIndexTag(pField);
+      writeIndexTag(field);
 
       return 0;
     }
@@ -321,12 +366,71 @@ namespace crow {
 
   private:
 
+    inline bool isInvalid(const SPField f) {
+      return (f->typeId == NONE);
+    }
+
     /**
      * return _stack or _setStack, depending on _setModeEnabled field.
      */
     Stack & staq() { return _dataStack; } // (_setModeEnabled ? _setStack : _stack); }
 
-    Field *_newField(CrowType typeId) {
+    const SPField _newStructField(CrowType typeId, std::string name, uint32_t id, uint32_t subid, uint32_t fixedLen) {
+      // new one
+      uint8_t index = (uint8_t)_fields.size();
+      if ((index & UPPER_BIT) != 0) {
+        // wow, 127 fields?  return a dummy field .. one that doesn't get written
+        return _dummyField();
+      }
+      _fields.push_back(std::make_shared<Field>());
+      SPField p = _fields[index];
+      p->name = name;
+      p->index = index;
+      p->typeId = typeId;
+      p->id = id;
+      p->subid = subid;
+      p->fixedLen = fixedLen;
+      p->isRaw = true;
+      return p;
+    }
+
+    const SPField _newField(CrowType typeId, uint32_t id, uint32_t subid=0) {
+      // new one
+      uint8_t index = (uint8_t)_fields.size();
+      if ((index & UPPER_BIT) != 0) {
+        // wow, 127 fields?  return a dummy field .. one that doesn't get written
+        assert(false);
+        return _dummyField();
+      }
+
+      _fields.push_back(std::make_shared<Field>());
+      SPField p = _fields[index];
+      p->index = index;
+      p->typeId = typeId;
+      p->id = id;
+      p->subid = subid;
+      return p;
+    }
+
+
+    const SPField _newField(CrowType typeId, std::string name, uint32_t id=0) {
+      // new one
+      uint8_t index = (uint8_t)_fields.size();
+      if ((index & UPPER_BIT) != 0) {
+        // wow, 127 fields?  return a dummy field .. one that doesn't get written
+        assert(false);
+        return _dummyField();
+      }
+      _fields.push_back(std::make_shared<Field>());
+      SPField p = _fields[index];
+      p->index = index;
+      p->typeId = typeId;
+      p->id = id;
+      p->name = name;
+      return p;
+    }
+/*
+    const Field &_newStructField(CrowType typeId, std::string name, uint32_t id, uint32_t fixedLen) {
       // new one
       uint8_t index = (uint8_t)_fields.size();
       if ((index & UPPER_BIT) != 0) {
@@ -337,8 +441,13 @@ namespace crow {
       Field *p = &_fields[index];
       p->index = index;
       p->typeId = typeId;
-      return p;
+      p->id = id;
+      p->name = name;
+      p->fixedLen = fixedLen;
+      p->isRaw = true;
+      return *p;
     }
+*/
 
     void writeFixed64(uint64_t value, Stack &stack) {
       union { uint64_t ival; uint8_t bytes[8];};
@@ -353,52 +462,55 @@ namespace crow {
     /*
      * one byte 0x80 | index
      */
-    void writeIndexTag(const Field *pField) {
+    void writeIndexTag(const SPField field) {
 
-      if (pField->_written) {
+      auto fit = _written.find(field);
+      if (fit != _written.end()) {
+      //if (field._written) {
 
         Stack &stack = _dataStack;
         uint8_t* ptr = stack.Push(1);
-        ptr[0] = pField->index | UPPER_BIT;
+        ptr[0] = field->index | UPPER_BIT;
 
       } else {
         Stack &stack = _hdrStack;
-        size_t namelen = pField->name.length();
+        size_t namelen = field->name.length();
 
         uint8_t tagbyte = CrowTag::THFIELD;
-        if (pField->subid > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
+        if (field->subid > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
         if (namelen > 0) { tagbyte |= FIELDINFO_FLAG_HAS_NAME; }
-        if (pField->isRaw) { tagbyte |= FIELDINFO_FLAG_RAW; }
+        if (field->isRaw) { tagbyte |= FIELDINFO_FLAG_RAW; }
 
         uint8_t* ptr = stack.Push(2);
         *ptr++ = tagbyte;
-        *ptr++ = pField->index;
+        *ptr++ = field->index;
 
         // typeid
         ptr = stack.Push(1);
-        ptr[0] = pField->typeId;
+        ptr[0] = field->typeId;
 
         // id and subid (if set)
-        writeVarInt(pField->id, stack);
-        if (pField->subid > 0) { writeVarInt(pField->subid, stack); }
+        writeVarInt(field->id, stack);
+        if (field->subid > 0) { writeVarInt(field->subid, stack); }
 
         // name (if set)
         if (namelen > 0) {
           writeVarInt(namelen, stack);
           ptr = stack.Push(namelen);
-          memcpy(ptr,pField->name.c_str(),namelen);
+          memcpy(ptr,field->name.c_str(),namelen);
         }
 
-        if (pField->isRaw && pField->fixedLen > 0) {
-          writeVarInt(pField->fixedLen, stack);
+        if (field->isRaw && field->fixedLen > 0) {
+          writeVarInt(field->fixedLen, stack);
         }
         // mark as written, so we dont write FIELDINFO more than once
-        ((Field*)pField)->_written = true;
+        _written[field] = true;
+        //((Field*)pField)->_written = true;
 
-        if (!pField->isRaw) {
+        if (!field->isRaw) {
           // field index on data row
           ptr = _dataStack.Push(1);
-          ptr[0] = pField->index | UPPER_BIT;
+          ptr[0] = field->index | UPPER_BIT;
         }
       }
     }
@@ -422,12 +534,13 @@ namespace crow {
     }
 
     Stack _stack, _dataStack, _hdrStack;
-    std::vector<Field> _fields;
-    std::vector<Field> _structFields;
+    std::vector<SPField> _fields;
+    std::vector<SPField> _structFields;
     bool _haveStructData;
     size_t _structLen;
     bool _structDefFinalized;
     Stack _structBuf;
+    std::map<const SPField,bool> _written;
   };
 
   class EncoderFactory {

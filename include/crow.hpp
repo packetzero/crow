@@ -63,18 +63,34 @@ enum CrowType {
 typedef std::vector<uint8_t> Bytes;
 
 namespace crow {
+
   class Field {
   public:
     CrowType    typeId;
     uint32_t    id;
-    uint32_t    subid;
+    uint32_t    subid;     // optional domain / table id
     std::string name;
-    uint8_t     index;
+
+    uint8_t     index;     // Nth field defined, used in value encoding refs
 
     bool        isRaw;     // struct field
     uint32_t    fixedLen;
+    
+    bool operator<(const Field &b) const {
+      if (name < b.name) { return true; }
+      if (name > b.name) { return false; }
 
-    bool        _written;
+      if (id < b.id) { return true; }
+      if (id > b.id) { return false; }
+
+      if (typeId < b.typeId) { return true; }
+      if (typeId > b.typeId) { return false; }
+
+      if (subid < b.subid) { return true; }
+      if (subid > b.subid) { return false; }
+
+      return false;
+    }
   };
 
   inline CrowType type_for(double val) { return TFLOAT64; }
