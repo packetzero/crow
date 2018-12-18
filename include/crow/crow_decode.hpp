@@ -12,20 +12,23 @@ namespace crow {
 
   class DecoderListener {
   public:
-    virtual void onField(const Field *pField, int32_t value, uint8_t flags) {}
-    virtual void onField(const Field *pField, uint32_t value, uint8_t flags) {}
-    virtual void onField(const Field *pField, int64_t value, uint8_t flags) {}
-    virtual void onField(const Field *pField, uint64_t value, uint8_t flags) {}
-    virtual void onField(const Field *pField, double value, uint8_t flags) {}
-    virtual void onField(const Field *pField, const std::string &value, uint8_t flags) {}
-    virtual void onField(const Field *pField, const std::vector<uint8_t> value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, int8_t value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, uint8_t value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, int32_t value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, uint32_t value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, int64_t value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, uint64_t value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, double value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, const std::string &value, uint8_t flags) {}
+    virtual void onField(SPCFieldInfo, const std::vector<uint8_t> value, uint8_t flags) {}
     virtual void onRowStart() {}
     virtual void onRowEnd() {}
     /**
      * @returns 0 by default.  If RV_SKIP_VARIABLE_FIELDS returned,
      * decoder will skip over variable length fields associated with row.
      */
-    virtual int onStruct(const uint8_t *data, size_t datalen, const std::vector<Field> &structFields) { return 0;}
+    virtual int onStruct(const uint8_t *data, size_t datalen, const std::vector<SPCFieldInfo> &structFields) { return 0;}
+    virtual void onTableStart(uint8_t flags) {}
   };
 
   class Decoder {
@@ -41,8 +44,6 @@ namespace crow {
      * @brief Decode all data and return number of rows.
      */
     virtual uint32_t decode(DecoderListener &listener, uint64_t setId = 0) = 0;
-
-    //virtual void init(const uint8_t* pEncData, size_t encLength) = 0;
 
     virtual ~Decoder() {}
 
@@ -67,109 +68,9 @@ namespace crow {
      */
     virtual size_t getExpandedSize() = 0;
 
-    virtual std::vector<Field> getFields() = 0;
+    virtual std::vector<SPCFieldInfo> getFields() = 0;
   };
 
-  /* struct to encapsulate any decoded column value.  Used by GenericDecoderListener */
-
-  struct DecColValue {
-    uint8_t fieldIndex;
-    CrowType typeId;
-    uint8_t flags;
-    union {
-      int32_t i32val;
-      uint32_t u32val;
-      int64_t i64val;
-      uint64_t u64val;
-      int8_t i8val;
-      uint8_t u8val;
-      double dval;
-    };
-    std::string strval;
-
-    DecColValue() : fieldIndex(0), typeId(CrowType::NONE), flags(0), i64val(0), strval() {}
-
-    DecColValue(uint8_t idx, CrowType typ, std::string sval, uint8_t flgs) : fieldIndex(idx), typeId(typ),
-      flags(flgs), u64val(0), strval(sval) {
-    }
-  };
-
-  typedef std::map<uint8_t, DecColValue> GenDecRow;
-
-  class GenericDecoderListener : public DecoderListener {
-  public:
-
-    GenericDecoderListener() : _rows(), _structData(), _rownum(0), _structFields() {
-    }
-    int onStruct(const uint8_t* data, size_t datalen, const std::vector<Field> &structFields) override {
-      auto index = _structData.size();
-      _structData.push_back(std::vector<uint8_t>(datalen));
-      memcpy(_structData[index].data(), data, datalen);
-      _structFields = structFields;
-      return 0;
-    }
-    void onField(const Field *pField, int32_t value, uint8_t flags) override {
-      sprintf(tmp,"%d", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
-      v.i32val = value;
-      _addValue(v);
-    }
-    void onField(const Field *pField, uint32_t value, uint8_t flags) override {
-      sprintf(tmp,"%u", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
-      v.u32val = value;
-      _addValue(v);
-    }
-    void onField(const Field *pField, int64_t value, uint8_t flags) override {
-      sprintf(tmp,"%lld", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
-      v.i64val = value;
-      _addValue(v);
-    }
-    void onField(const Field *pField, uint64_t value, uint8_t flags) override {
-      sprintf(tmp,"%llu", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
-      v.u64val = value;
-      _addValue(v);
-    }
-    void onField(const Field *pField, double value, uint8_t flags) override {
-      sprintf(tmp,"%.3f", value);
-      auto v = DecColValue(pField->index, pField->typeId, std::string(tmp), flags);
-      v.dval = value;
-      _addValue(v);
-    }
-    void onField(const Field *pField, const std::string &value, uint8_t flags) override {
-      auto v = DecColValue(pField->index, pField->typeId, value, flags);
-      _addValue(v);
-    }
-    void onField(const Field *pField, const std::vector<uint8_t> value, uint8_t flags) override {
-      auto v = DecColValue(pField->index, pField->typeId, "", flags);
-      v.strval.assign((const char *)value.data(), value.size());
-      _addValue(v);
-    }
-
-    void onRowEnd() override {
-      _rownum++;
-    }
-
-    std::vector< GenDecRow > _rows;
-    std::vector< std::vector<uint8_t> > _structData;
-
-  private:
-
-    void _addValue(DecColValue val) {
-      if (_rows.size() <= _rownum) {
-        _rows.push_back(GenDecRow());
-      }
-      _rows[_rows.size()-1][val.fieldIndex] = val;
-    }
-
-    size_t _rownum;
-    char tmp[64];
-    std::vector<Field> _structFields;
-  };
-
-
-}
+} // namespace crow
 
 #endif // _CROW_HPP_

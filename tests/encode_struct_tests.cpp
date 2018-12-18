@@ -9,6 +9,7 @@ class EncStructTest : public ::testing::Test {
   }
 };
 
+#ifdef NEVER
 TEST_F(EncStructTest, encodesStructAndVariable)
 {
   auto pEnc = crow::EncoderFactory::New();
@@ -191,7 +192,7 @@ TEST_F(EncStructTest, encodesStructEnd)
   s += "53020100025f5403";
 
   const crow::SPField NAME = enc.fieldFor(TSTRING, "name");
-  
+
   enc[NAME] = "bo";         s += "43030100046e616d65";  // field def
 
   PERSON(person,"Bob", 23, true);
@@ -218,3 +219,5 @@ TEST_F(EncStructTest, encodesStructEnd)
 
   delete pEnc;
 }
+
+#endif // NEVER

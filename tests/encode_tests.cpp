@@ -3,6 +3,12 @@
 
 #include "test_defs.hpp"
 
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  int status= RUN_ALL_TESTS();
+  return status;
+}
+
 class EncTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
@@ -10,19 +16,27 @@ class EncTest : public ::testing::Test {
   }
 };
 
+static const SPFieldDef fname = FieldDef::alloc(TSTRING, "name");
+static const SPFieldDef fage = FieldDef::alloc(TINT32, "age");
+static const SPFieldDef factive = FieldDef::alloc(TUINT8, "active");
+
+static const SPFieldDef A = FieldDef::alloc(TSTRING, MY_FIELD_A);
+static const SPFieldDef B = FieldDef::alloc(TINT32, MY_FIELD_B);
+static const SPFieldDef C = FieldDef::alloc(TUINT8, MY_FIELD_C);
+
+static const SPFieldDef D = FieldDef::alloc(TFLOAT64, MY_FIELD_A);
+static const SPFieldDef F = FieldDef::alloc(TFLOAT32, MY_FIELD_B);
+
+
 TEST_F(EncTest, usingFieldObjIndex) {
   auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
   std::string s = "";
 
-  const crow::SPField fname = enc.fieldFor(TSTRING, "name");
-  const crow::SPField fage = enc.fieldFor(TINT32,"age");
-  const crow::SPField factive = enc.fieldFor(TUINT8,"active");
-
-  enc[fname] = "bob";         s += "43000100046e616d65";
-  enc[fage] = 23;             s += "4301020003616765";
-  enc[factive] = true;        s += "4302090006616374697665";
+  enc.put(fname, "bob");     s += "43000100046e616d65";
+  enc.put(fage, 23);         s += "4301020003616765";
+  enc.put(factive, true);    s += "4302090006616374697665";
 
   // row data
   s += "05";
@@ -32,14 +46,14 @@ TEST_F(EncTest, usingFieldObjIndex) {
 
   enc.startRow();                   s += "05";
 
-  enc[fname] = "jerry";    s += "80056a65727279";
-  enc[fage] = 58 ;        s += "8174";
-  enc[factive] = false;   s += "8200";
+  enc.put(fname, "jerry");   s += "80056a65727279";
+  enc.put(fage, 58);         s += "8174";
+  enc.put(factive, false);   s += "8200";
   enc.startRow();                   s += "05";
 
-  enc[fname] = "linda";   s += "80056c696e6461";
-  enc[fage] = 33 ;        s += "8142";
-  enc[factive] = true;    s += "8201";
+  enc.put(fname, "linda");   s += "80056c696e6461";
+  enc.put(fage, 33);         s += "8142";
+  enc.put(factive, true);    s += "8201";
 
   enc.flush();
 
@@ -55,49 +69,6 @@ TEST_F(EncTest, usingFieldObjIndex) {
   delete pEnc;
 }
 
-#ifdef NEVER
-TEST_F(EncTest, withColumnNames) {
-  auto pEnc = crow::EncoderFactory::New();
-  auto &enc = *pEnc;
-
-  std::string s = "";
-
-  // subscripts
-
-  enc["name"] = "bob";         s += "43000100046e616d65";
-  enc["age"] = 23;             s += "4301020003616765";
-  enc["active"] = true;        s += "4302090006616374697665";
-
-  // row data
-  s += "05";
-  s += "8003626f62";
-  s += "812e";
-  s += "8201";
-
-  enc.startRow();                   s += "05";
-
-  enc["name"] = "jerry";    s += "80056a65727279";
-  enc["age"] = 58 ;        s += "8174";
-  enc["active"] = false;   s += "8200";
-  enc.startRow();                   s += "05";
-
-  enc["name"] = "linda";   s += "80056c696e6461";
-  enc["age"] = 33 ;        s += "8142";
-  enc["active"] = true;    s += "8201";
-  enc.flush();
-
-  const uint8_t* result = enc.data();
-
-  std::string actual;
-  BytesToHexString(result, enc.size(), actual);
-
-  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
-
-  ASSERT_EQ(s, actual);
-
-  delete pEnc;
-}
-#endif // NEVER
 
 TEST_F(EncTest, encodeFloats)
 {
@@ -106,13 +77,11 @@ TEST_F(EncTest, encodeFloats)
 
   std::string s = "";
 
-  const crow::SPField A = enc.fieldFor(TFLOAT64, MY_FIELD_A);
-  const crow::SPField B = enc.fieldFor(TFLOAT32, MY_FIELD_B);
 
   // 0b typeid : Float64
-  enc[A] = 3000444888.325;        s += "03000b02";  // def
+  enc.put(D, 3000444888.325);        s += "03000b02";  // def
   // 0a # typeid : Float32
-  enc[B] = (float)123.456;        s += "03010a36"; // def
+  enc.put(F, (float)123.456);        s += "03010a36"; // def
 
   // data
   s += "05";
@@ -121,8 +90,8 @@ TEST_F(EncTest, encodeFloats)
 
   enc.startRow();                           s += "05";
 
-  enc[A] = 3000444888.325;  s += "8066660afbe45ae641";
-  enc[B] = (float)123.456;  s += "8179e9f642";
+  enc.put(D, 3000444888.325);  s += "8066660afbe45ae641";
+  enc.put(F, (float)123.456);  s += "8179e9f642";
 
   const uint8_t* result = enc.data();
 
@@ -144,14 +113,9 @@ TEST_F(EncTest, encodesUsingFieldId)
 
   std::string s = "";
 
-  const crow::SPField A = enc.fieldFor(TSTRING, MY_FIELD_A);
-  const crow::SPField B = enc.fieldFor(TINT32, MY_FIELD_B);
-  const crow::SPField C = enc.fieldFor(TUINT8, MY_FIELD_C);
-
-
-  enc[A] = "Larry";  s += "03000102";
-  enc[B] = 23;       s += "03010236";
-  enc[C] = true;     s += "03020966";
+  enc.put(A, "Larry");  s += "03000102";
+  enc.put(B, 23);       s += "03010236";
+  enc.put(C, true);     s += "03020966";
 
   s += "05";
   s += "80054c61727279";
@@ -160,8 +124,8 @@ TEST_F(EncTest, encodesUsingFieldId)
 
   enc.startRow();                    s += "05";
  // pEnc->put("Moe",MY_FIELD_A);        s += "80034d6f65";
-  enc[B] = 62;       s += "817c";
-  enc[C] = false;    s += "8200";
+  enc.put(B, 62);       s += "817c";
+  enc.put(C, false);    s += "8200";
 
   const uint8_t* result = enc.data();
 
@@ -175,7 +139,6 @@ TEST_F(EncTest, encodesUsingFieldId)
   delete pEnc;
 }
 
-
 TEST_F(EncTest, encodesOutOfOrder)
 {
   auto pEnc = crow::EncoderFactory::New();
@@ -183,17 +146,12 @@ TEST_F(EncTest, encodesOutOfOrder)
 
   std::string s = "";
 
-  const crow::SPField A = enc.fieldFor(TSTRING, MY_FIELD_A);
-  const crow::SPField B = enc.fieldFor(TINT32, MY_FIELD_B);
-  const crow::SPField C = enc.fieldFor(TUINT8, MY_FIELD_C);
-
-
   //first row sets index order
   // each use TFIELDINFO followed by value
 
-  enc[A] = "Larry";  s += "03000102";
-  enc[B] = 23;       s += "03010236";
-  enc[C] = true;     s += "03020966";
+  enc.put(A, "Larry");  s += "03000102";
+  enc.put(B, 23);       s += "03010236";
+  enc.put(C, true);     s += "03020966";
 
   s += "05";
   s += "80054c61727279";
@@ -202,9 +160,9 @@ TEST_F(EncTest, encodesOutOfOrder)
 
   enc.startRow();                    s += "05";
 
-  enc[C] = false;    s += "8200";
-  enc[B] = 62;       s += "817c";
-  enc[A] = "Moe";    s += "80034d6f65";
+  enc.put(C, false);    s += "8200";
+  enc.put(B, 62);       s += "817c";
+  enc.put(A, "Moe");    s += "80034d6f65";
 
   const uint8_t* result = enc.data();
 
@@ -223,31 +181,27 @@ TEST_F(EncTest, encodesSparse)
   auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
-  const crow::SPField A = enc.fieldFor(TSTRING, MY_FIELD_A);
-  const crow::SPField B = enc.fieldFor(TINT32, MY_FIELD_B);
-  const crow::SPField C = enc.fieldFor(TUINT8, MY_FIELD_C);
-
   std::string s = "";
 
-  enc[A] = "Larry";  s += "03000102";
-  enc[B] = 23;       s += "03010236";
+  enc.put(A, "Larry");  s += "03000102";
+  enc.put(B, 23);       s += "03010236";
 
   s += "05"; // start data row
   s += "80054c61727279";
   s += "812e";
 
   enc.startRow();
-  enc[C] = true;     s += "03020966";
+  enc.put(C, true);     s += "03020966";
   s += "05";
   s += "8201";
 
   enc.startRow();                    s += "05";
 
-  enc[A] = "Moe";    s += "80034d6f65";
+  enc.put(A, "Moe");    s += "80034d6f65";
   enc.startRow();                    s += "05";
 
-  enc[B] = 62;       s += "817c";
-  enc[C] = false;    s += "8200";
+  enc.put(B, 62);       s += "817c";
+  enc.put(C, false);    s += "8200";
 
   const uint8_t* result = enc.data();
 
@@ -295,25 +249,27 @@ TEST_F(EncTest, encodesSet)
   delete pEnc;
 }
 */
+
 TEST_F(EncTest, encodesSubids)
 {
   auto pEnc = crow::EncoderFactory::New();
   auto &enc = *pEnc;
 
-  const crow::SPField A = enc.fieldFor(TUINT32, 1);
-  const crow::SPField B = enc.fieldFor(TUINT32, 1, 44000);
+  // overrides the global scoped A, B
+  const SPFieldDef A = FieldDef::alloc(TUINT32, 1);
+  const SPFieldDef B = FieldDef::alloc(TUINT32, 1, 44000);
 
   std::string s = "";
 
-  enc[A] = 0x22U;          s += "03000301";
-  enc[B] = 0x4cU;   s += "23010301e0d702";
+  enc.put(A, 0x22U);          s += "03000301";
+  enc.put(B, 0x4cU);   s += "23010301e0d702";
   s += "05"; // data row start
   s += "8022";
   s += "814c";
 
   enc.startRow();            s += "05";
-  enc[A] = 0x3AU;          s += "803a";
-  enc[B] = 0x1BU;   s += "811b";
+  enc.put(A, 0x3AU);          s += "803a";
+  enc.put(B, 0x1BU);   s += "811b";
   enc.flush();
 
   std::string actual;
@@ -335,11 +291,11 @@ TEST_F(EncTest, decorators) {
 
   enc.startTable(TABLE_FLAG_DECORATE);   s += "12";
 
-  const crow::SPField DATE = enc.fieldFor(TSTRING, "date");
-  const crow::SPField DOMAIN = enc.fieldFor(TINT32, "domain");
+  const SPFieldDef DATE = FieldDef::alloc(TSTRING, "date");
+  const SPFieldDef DOMA = FieldDef::alloc(TINT32, "domain");
 
-  enc[DATE] = "20180502";         s += "430001000464617465";
-  enc[DOMAIN] = 23;               s += "4301020006646f6d61696e";
+  enc.put(DATE, "20180502");         s += "430001000464617465";
+  enc.put(DOMA, 23);               s += "4301020006646f6d61696e";
 
   s += "05";
   s += "80083230313830353032";
@@ -347,13 +303,9 @@ TEST_F(EncTest, decorators) {
 
   enc.startTable();            s += "02";
 
-  const crow::SPField NAME = enc.fieldFor(TSTRING, "name");
-  const crow::SPField AGE = enc.fieldFor(TINT32, "age");
-  const crow::SPField ACTIVE = enc.fieldFor(TUINT8, "active");
-
-  enc[NAME] = "bob";         s += "43000100046e616d65";
-  enc[AGE] = 23;             s += "4301020003616765";
-  enc[ACTIVE] = true;        s += "4302090006616374697665";
+  enc.put(fname, "bob");         s += "43000100046e616d65";
+  enc.put(fage, 23);             s += "4301020003616765";
+  enc.put(factive, true);        s += "4302090006616374697665";
 
   // row data
   s += "05";
@@ -363,14 +315,14 @@ TEST_F(EncTest, decorators) {
 
   enc.startRow();                   s += "05";
 
-  enc[NAME] = "jerry";    s += "80056a65727279";
-  enc[AGE] = 58 ;        s += "8174";
-  enc[ACTIVE] = false;   s += "8200";
+  enc.put(fname, "jerry");    s += "80056a65727279";
+  enc.put(fage, 58);        s += "8174";
+  enc.put(factive, false);   s += "8200";
   enc.startRow();                   s += "05";
 
-  enc[NAME] = "linda";   s += "80056c696e6461";
-  enc[AGE] = 33 ;        s += "8142";
-  enc[ACTIVE] = true;    s += "8201";
+  enc.put(fname, "linda");   s += "80056c696e6461";
+  enc.put(fage, 33 );        s += "8142";
+  enc.put(factive, true);    s += "8201";
   enc.flush();
 
   const uint8_t* result = enc.data();
@@ -384,8 +336,6 @@ TEST_F(EncTest, decorators) {
 
   delete pEnc;
 }
-
-
 
 static const char hexCharsLower[] = {
   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',

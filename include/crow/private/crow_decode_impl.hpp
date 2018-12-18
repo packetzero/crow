@@ -7,6 +7,7 @@
 #include "../../crow.hpp"
 #include "stack.hpp"
 #include "protobuf_wire_format.h"
+#include "../../crow/crow_test_decoder.hpp"
 
 #define NONE_LEFT(PTR) (PTR >= _end)
 #define BYTES_REMAIN(PTR) (PTR < _end)
@@ -60,8 +61,9 @@ namespace crow {
     DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _data(pEncData, encLength), _fields(), _err(0), _typemask(0L),
       _errOffset(0L), _setId(0L), _mapSets(),
       _byteCount(encLength), _flags(0), _numRows(0),
-      _structFields(), _structLen(0), _isDecoratorTable(false),
-    _decoratorFields(), _decoratorListener(), _decoratorValues()
+      _structFields(), _structLen(0), _tableFlags(0)
+      //, _isDecoratorTable(false),
+    //_decoratorFields(), _decoratorListener(), _decoratorValues()
     {
     }
 
@@ -81,22 +83,7 @@ namespace crow {
 
       _numRows = 0;
       while(false == decodeRow(listener)) {
-        if (!_isDecoratorTable) {
-
-          if (_decoratorFields.size() > 0) {
-            if (_decoratorFields.size() != _decoratorValues.size()) {
-              // problemo
-              assert(false);
-            } else {
-              for (int i=0; i < _decoratorFields.size(); i++) {
-                _notifyDecorator(_decoratorFields[i], _decoratorValues[i], listener);
-              }
-            }
-
-          }
-
           _numRows++;
-        }
       }
 
       if (_numRows > 0) {
@@ -105,28 +92,6 @@ namespace crow {
 
       return _numRows;
     }
-
-    void _notifyDecorator(Field &f, DecColValue &val, DecoderListener &listener) {
-      if (f.typeId != val.typeId) {
-        assert(false); // problem
-        return;
-      }
-
-      switch(f.typeId) {
-        case TSTRING: {
-          listener.onField(&f, val.strval, _flags);
-          break;
-        }
-        case TINT32: {
-          listener.onField(&f, val.i32val, _flags);
-          break;
-        }
-        default:
-          assert(false); // TODO: implement
-          break;
-      }
-    }
-
 
     bool decodeRow(DecoderListener &listener) override {
       return _doDecodeRow(listener, _data);
@@ -147,26 +112,19 @@ namespace crow {
           if (index >= _fields.size()) {
             _markError(EINVAL, data); return true;
           }
-          const Field* pField = &_fields[index];
+          SPFieldInfo pField = _fields[index];
 
-          if (_isDecoratorTable) {
-            if (_decodeValue(pField, data, _decoratorListener)) {
-              break;
-            }
-            //printf("decorator rows:%ld\n", _decoratorListener._rows.size());
-          } else {
-            if (_decodeValue(pField, data, listener)) {
-              break;
-            }
+          if (_decodeValue(pField, data, listener)) {
+            break;
           }
 
         } else if (tagid == TROW) {
           if (_numRows > 0) {
-            if (!_isDecoratorTable) { listener.onRowEnd(); }
+            { listener.onRowEnd(); }
           }
 
           _flags = (tagbyte >> 4) & 0x07;
-          if (!_isDecoratorTable) { listener.onRowStart(); }
+          { listener.onRowStart(); }
           if (_structLen > 0) {
             auto structPtr = data.ptr;
             if (data.remaining() < _structLen) {
@@ -183,7 +141,7 @@ namespace crow {
               }
             }
 
-            int rv = listener.onStruct(structPtr, _structLen, _structFields);
+            int rv = listener.onStruct(structPtr, _structLen, _constStructFields);
             if (rv == RV_SKIP_VARIABLE_FIELDS) {
               data.ptr += varlen;
             }
@@ -206,10 +164,17 @@ namespace crow {
           // clear previous table state.
           _structFields.clear();
           _fields.clear();
+          _constFields.clear();
+          _constStructFields.clear();
+          _numRows = 0;
+          _tableFlags = tagbyte & 0xF0;
+
+          listener.onTableStart(tagbyte & 0xF0);
+/*
           if (_isDecoratorTable && _decoratorListener._rows.size() > 0) {
             for (auto tupl : _decoratorListener._rows[0]) {
               _decoratorValues.push_back(tupl.second);
-              _decoratorValues[_decoratorValues.size()-1].fieldIndex += DECORATOR_INDEX_OFFSET;
+//              _decoratorValues[_decoratorValues.size()-1] += DECORATOR_INDEX_OFFSET;
             }
           }
 
@@ -220,20 +185,21 @@ namespace crow {
             _decoratorListener = GenericDecoderListener();
             _decoratorValues.clear();
           }
-
+*/
         } else if (tagid == THFIELD) {
 
-          const Field* pField = _decodeFieldInfo(data, tagbyte);
+          SPCFieldInfo pField = _decodeFieldInfo(data, tagbyte);
           if (pField == 0L) {
             _markError(ENOSPC, data); return true;
           }
 
+/*
           if (_isDecoratorTable) {
             // copy field def to decorator defs
             _decoratorFields.push_back(_fields[_fields.size()-1]);
-            _decoratorFields[_decoratorFields.size()-1].index += DECORATOR_INDEX_OFFSET;
+            _decoratorFields[_decoratorFields.size()-1]->index += DECORATOR_INDEX_OFFSET;
           }
-
+*/
         } else {
           _markError(EINVAL, data); return true;
         }
@@ -242,7 +208,7 @@ namespace crow {
       return false;
     }
 
-    const Field* _decodeFieldInfo(PData &data, uint8_t tagbyte) {
+    SPCFieldInfo _decodeFieldInfo(PData &data, uint8_t tagbyte) {
 
       bool has_subid = (tagbyte & FIELDINFO_FLAG_HAS_SUBID) != 0;
       bool has_name = (tagbyte & FIELDINFO_FLAG_HAS_NAME) != 0;
@@ -265,7 +231,7 @@ namespace crow {
 
       // sanity check typeId
 
-      if (typeId == CrowType::NONE || typeId >= CrowType::NUM_TYPES) {
+      if (typeId == TNONE || typeId >= CrowType::NUM_TYPES) {
         _markError(EINVAL, data);
         throw new std::runtime_error("invalid typeId");
       }
@@ -295,27 +261,25 @@ namespace crow {
       if (isRaw) {
         if ((CrowType)typeId == CrowType::TSTRING || (CrowType)typeId == CrowType::TBYTES) {
           fixedLen = readVarInt(data);
+        } else {
+          fixedLen = byte_size((CrowType)typeId);
         }
       }
 
       // TODO: check err
 
-      _fields.push_back(Field());
-      Field *pField = &_fields[index];
-      pField->index = index;
-      pField->typeId = (CrowType)typeId;
-      pField->id = id;
-      pField->subid = subid;
-      pField->name = name;
-      pField->isRaw = isRaw;
-      pField->fixedLen = fixedLen;
+      const SPFieldDef fieldDef = FieldDef::alloc((DynType)typeId, name, id, subid);
+      SPFieldInfo field = std::make_shared<FieldInfo>(fieldDef, index, fixedLen);
+      _fields.push_back(field);
+      _constFields.push_back(field);
 
-      if (pField->isRaw) {
-        _structFields.push_back(*pField);
-        _structLen += (fixedLen > 0 ? fixedLen : byte_size(pField->typeId));
+      if (isRaw) {
+        _structFields.push_back(field);
+        _constStructFields.push_back(field);
+        _structLen += fixedLen;
       }
 
-      return pField;
+      return field;
     }
 
     /**
@@ -330,20 +294,19 @@ namespace crow {
 
     virtual size_t getExpandedSize() override { return _byteCount; }
 
-    virtual std::vector<Field> getFields() override {
+    virtual std::vector<SPCFieldInfo> getFields() override {
+      auto tmp = std::vector<SPCFieldInfo>();
+      for (auto f : _fields) { tmp.push_back(f); }
+      /*
       if (_decoratorFields.size() > 0) {
-        auto tmp = std::vector<Field>();
-        for (auto f : _fields) { tmp.push_back(f); }
         for (auto f : _decoratorFields) { tmp.push_back(f); }
-        return tmp;
-      }
-      return _fields;
-      
+      }*/
+      return tmp;
     }
 
   private:
 
-    bool _decodeValue(const Field *pField, PData &data, DecoderListener &listener) {
+    bool _decodeValue(SPCFieldInfo pField, PData &data, DecoderListener &listener) {
       if (data.empty()) { _markError(ENOSPC, data); return true; }
 
       switch(pField->typeId) {
@@ -478,7 +441,7 @@ namespace crow {
     //void setFieldIndexAdd(uint32_t value) override { _fieldIndexAdd = value; }
 
     PData _data;
-    std::vector<Field> _fields;
+    std::vector<SPFieldInfo> _fields;
     int            _err;
     uint64_t       _typemask;
     uint64_t       _errOffset;
@@ -487,14 +450,20 @@ namespace crow {
     size_t         _byteCount;
     uint8_t        _flags;
     uint32_t       _numRows;
-    std::vector<Field> _structFields;
+    std::vector<SPFieldInfo> _structFields;
     size_t         _structLen;
-    bool           _isDecoratorTable;
 
-    std::vector<Field>       _decoratorFields;
+    // these are duplicates of _fields and _structFields, marked as const for sharing with listeners
+    std::vector<SPCFieldInfo> _constFields;
+    std::vector<SPCFieldInfo> _constStructFields;
+    uint8_t _tableFlags;
+
+/*
+    bool           _isDecoratorTable;
+    std::vector<SPFieldInfo> _decoratorFields;
     GenericDecoderListener   _decoratorListener;
     std::vector<DecColValue> _decoratorValues;
-
+*/
     uint64_t readVarInt(PData &data) {
       uint64_t value = 0L;
       uint64_t shift = 0L;
