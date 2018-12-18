@@ -194,7 +194,7 @@ static void renderFieldValue(crow::SPCFieldInfo field, crow::DecColValue &col, s
 void row_to_csv(crow::GenDecRow &row, std::string &s)
 {
   auto indexMap = index_sorted_map(row);
-  
+
   for ( int i=0; i < indexMap.size() ; i++) {
     auto field = indexMap[i];
     if (!field) { continue; }
@@ -208,32 +208,12 @@ std::string to_csv(std::vector<crow::GenDecRow> &rows, crow::GenDecRow *decorato
 {
   std::string s;
   for (auto &row : rows) {
-    
+
     std::string line = "";
     row_to_csv(row, line);
-/*
-    auto indexMap = index_sorted_map(row);
 
-    for ( int i=0; i < indexMap.size() ; i++) {
-      auto field = indexMap[i];
-      if (!field) { continue; }
-      crow::DecColValue &col = row[field];
-      if (field->index > 0) s += ",";
-
-      renderFieldValue(field, col, s);
-    }
- */
     if (decoratorFields != nullptr) {
       row_to_csv(*decoratorFields, line);
-      /*
-      auto indexMap = index_sorted_map(*decoratorFields);
-      for ( int i=0; i < indexMap.size() ; i++) {
-        auto field = indexMap[i];
-        if (!field) { continue; }
-        s += ",";
-        renderFieldValue(field, (*decoratorFields)[field], s);
-      }
-       */
     }
     s += line;
     s += "||";

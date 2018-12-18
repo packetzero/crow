@@ -1,20 +1,24 @@
-## Crow : A C++ library for encoding and decoding typed rows
+## Crow : A C++11 library for encoding and decoding typed rows
 
-Think of this as a binary CSV.  This library is for encoding and decoding native C types in a compact protobuf-like format.  It's best suited for serializing typed tabular data, where the columns are not known at compile time.  The encoding format is defined in the [Crow Encoding Spec](https://github.com/packetzero/libcrow_cr/blob/master/doc/CrowEncodingSpec.md).
+Think of this as a binary CSV.  This library is for encoding and decoding native C types in a compact protobuf-like format.  It's best suited for serializing typed tabular data, where the columns are not known at compile time.  The encoding format is defined in the [Crow Encoding Spec](https://github.com/packetzero/libcrow_cr/blob/master/doc/CrowEncodingSpec.md).  This project includes [dyno](https://github.com/packetzero/dyno) header library as a submodule.
+This implementation supports decorators, a set of fields that apply to all rows, but are stored only once to avoid repetition.
 
 ### Why not use protobuf?
 One of the challenges with libprotobuf, is the need to compile definitions.  Part of this
 is due to the encoding of WireFormat (varint,length-delimited,etc) rather than FieldType
 (uint32, int64,double,string).
 
-### Encoding Example - Named fields
+### Encoding Example - Field names
 
 ```
 auto pEnc = crow::EncoderNew();
 auto &enc = *pEnc;
-enc["Name"] = "Bob";
-enc["Age"] = 23;
-enc["Active"] = true;
+
+static const SPFieldDef NAME = FieldDef::alloc(TSTRING, "name");
+static const SPFieldDef AGE = FieldDef::alloc(TINT32, "age");
+
+enc.put(NAME, "Bob");
+enc.put(AGE, 23);
 enc.endRow();
 
 const uint8_t* output = enc.data();  // enc.size() bytes
@@ -23,9 +27,11 @@ const uint8_t* output = enc.data();  // enc.size() bytes
 ### Encoding Example - Fields with IDs
 
 ```
-enc[8002] = "Bob";
-enc[8044] = 23;
-enc[SomeFieldId] = true;
+static const SPFieldDef IpfixTcpSourcePort = FieldDef::alloc(TUINT16, 182);
+static const SPFieldDef IpfixTcpDestPort = FieldDef::alloc(TUINT16, 183);
+
+enc.put(IpfixTcpSourcePort, 12243);
+enc.put(IpfixTcpSourcePort, 443);
 enc.endRow();
 
 const uint8_t* output = enc.data();  // enc.size() bytes
@@ -40,7 +46,14 @@ auto pDec = crow::DecoderNew(pEncodedData, encodedDataSize);
 pDec->decode(dl);
 
 // do something with the data
-DecColValue &fieldValue =  dl->_rows[i][fieldIndex];
+for (auto row : dl->_rows) {
+  for (auto it = row.begin(); it != row.end; it++) {
+    crow::SPCFieldInfo field = it->first;
+    crow::DecColValue &value = it->second;
+
+    printf("%s : %s\n", field->name.c_str(), value.as_s().c_str());
+  }
+}
 
 ```
 
