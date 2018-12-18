@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <memory>
 
 #include "../dyno/include/dynobj.hpp"
 
