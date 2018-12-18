@@ -16,6 +16,7 @@ if($ENV{MAKE_TESTS})
 
   ADD_EXECUTABLE(crowtests ${TESTSRCS})
   TARGET_LINK_LIBRARIES(crowtests gtest)
+  TARGET_LINK_LIBRARIES(crowtests pthread)
 else()
   message("===================================")
   message("NOTE: This is a header-only library")
