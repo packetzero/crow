@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "../dyno/include/dynobj.hpp"
+
 enum CrowTag {
     TUNKNOWN,
     TBLOCK,          // 1 optional
@@ -41,73 +43,33 @@ enum CrowTag {
 
 #define TABLE_FLAG_DECORATE  (uint8_t)0x10
 
-enum CrowType {
-    NONE,
-    TSTRING,         // 1
-    TINT32,          // 2
-    TUINT32,         // 3
-    TINT64,          // 4
-    TUINT64,         // 5
-    TINT16,          // 6
-    TUINT16,         // 7
-    TINT8,           // 8
-    TUINT8,          // 9
-
-    TFLOAT32,        // 10
-    TFLOAT64,        // 11
-    TBYTES,          // 12
-
-    NUM_TYPES
-};
+typedef DynType CrowType;
 
 typedef std::vector<uint8_t> Bytes;
 
 namespace crow {
 
-  class Field {
+  /*
+   * Encoder and Decoders need to know a few more things about the field.
+   */
+  struct FieldInfo : public FieldDef {
   public:
-    CrowType    typeId;
-    uint32_t    id;
-    uint32_t    subid;     // optional domain / table id
-    std::string name;
 
-    uint8_t     index;     // Nth field defined, used in value encoding refs
+    uint32_t    structFieldLength; // if > 0, part of struct
 
-    bool        isRaw;     // struct field
-    uint32_t    fixedLen;
-    
-    bool operator<(const Field &b) const {
-      if (name < b.name) { return true; }
-      if (name > b.name) { return false; }
+    uint8_t     index;             // Nth field defined, used in value encoding refs
+    bool        isWritten;         // If field def has been written to encoded output yet
 
-      if (id < b.id) { return true; }
-      if (id > b.id) { return false; }
+    bool isStructField() const { return structFieldLength > 0; }
 
-      if (typeId < b.typeId) { return true; }
-      if (typeId > b.typeId) { return false; }
-
-      if (subid < b.subid) { return true; }
-      if (subid > b.subid) { return false; }
-
-      return false;
+    FieldInfo(const SPFieldDef def, uint8_t idx, uint32_t fixedLen) :
+      FieldDef(def->typeId, def->name, def->id, def->schemaId),
+      structFieldLength(fixedLen), index(idx), isWritten(false) {
     }
   };
 
-  inline CrowType type_for(double val) { return TFLOAT64; }
-  inline CrowType type_for(float val) { return TFLOAT32; }
-  inline CrowType type_for(const std::string val) { return TSTRING; }
-  inline CrowType type_for(uint8_t val) { return TUINT8; }
-  inline CrowType type_for(int8_t val) { return TINT8; }
-  inline CrowType type_for(uint16_t val) { return TUINT16; }
-  inline CrowType type_for(int16_t val) { return TINT16; }
-  inline CrowType type_for(uint32_t val) { return TUINT32; }
-  inline CrowType type_for(int32_t val) { return TINT32; }
-  inline CrowType type_for(uint64_t val) { return TUINT64; }
-  inline CrowType type_for(int64_t val) { return TINT64; }
-  inline CrowType type_for(bool val) { return TUINT8; }
-  inline CrowType type_for(const char * val) { return TSTRING; }
-  inline CrowType type_for(const uint8_t * val) { return TBYTES; }
-  inline CrowType type_for(const std::vector<uint8_t>& value) { return TBYTES; }
+  typedef std::shared_ptr<FieldInfo> SPFieldInfo;
+  typedef std::shared_ptr<const FieldInfo> SPCFieldInfo;
 
   inline size_t byte_size(CrowType typeId)
   {
@@ -127,7 +89,7 @@ namespace crow {
     }
   }
 
-}
+} // namespace crow
 
 #include "crow/crow_encode.hpp"
 #include "crow/crow_decode.hpp"

@@ -1,12 +1,8 @@
 #include <gtest/gtest.h>
 #include "../include/crow.hpp"
+#include "../include/crow/crow_test_decoder.hpp"
 #include "test_defs.hpp"
 
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  int status= RUN_ALL_TESTS();
-  return status;
-}
 
 
 class DecTest : public ::testing::Test {
@@ -55,40 +51,67 @@ std::string quoted(std::string str)
   return dest;
 }
 
-std::string to_header_csv(std::vector<crow::Field> fields)
+std::vector< crow::SPCFieldInfo> index_sorted_map(crow::GenDecRow &obj)
+{
+  auto indexMap = std::vector< crow::SPCFieldInfo>(100);
+  for (auto it = obj.begin(); it != obj.end(); it++) {
+    crow::SPCFieldInfo field = it->first;
+    indexMap[(int)field->index] = field;
+  }
+  return indexMap;
+}
+
+
+std::string to_header_csv(std::vector<crow::SPCFieldInfo> fields, crow::GenDecRow *decoratorFields)
 {
   static char tmp[48];
   std::string s;
+  int i=-1;
   for (auto &fld : fields) {
-    if (fld.index > 0) s += ",";
-    if (fld.id > 0) {
-      sprintf(tmp,"%d", fld.id);
+    i++;
+    if (i > 0) s += ",";
+    if (fld->id > 0) {
+      sprintf(tmp,"%d", fld->id);
       s += tmp;
-      if (fld.subid > 0) {
-        sprintf(tmp,"_%d", fld.subid);
+      if (fld->schemaId > 0) {
+        sprintf(tmp,"_%d", fld->schemaId);
         s += tmp;
       }
     }
-    if (fld.name.length() > 0) { s += fld.name; };
+    if (fld->name.length() > 0) { s += fld->name; };
+  }
+  if (decoratorFields != nullptr) {
+    auto indexMap = index_sorted_map(*decoratorFields);
+
+    for ( int i=0; i < indexMap.size() ; i++) {
+      auto field = indexMap[i];
+      if (!field) { continue; }
+
+      s += ",";
+      s += field->name;
+    }
   }
   return s;
 }
 
-void renderValue(std::string &s, uint8_t* &p, crow::Field &field)
+/*
+ * Render a value from C struct
+ */
+void renderStructValue(std::string &s, uint8_t* &p, crow::SPCFieldInfo field)//, crow::DecColValue &value)
 {
   char tmp[64];
-  switch(field.typeId) {
+  switch(field->typeId) {
     case CrowType::TSTRING: {
-      std::string val = std::string(p, p + field.fixedLen);
+      std::string val = std::string(p, p + field->structFieldLength);
       s += val;
-      p += field.fixedLen;
+      p += field->structFieldLength;
       break;
     }
     case CrowType::TBYTES: {
       std::string val;
-      BytesToHexString(p, field.fixedLen, val);
+      BytesToHexString(p, field->structFieldLength, val);
       s += val;
-      p += field.fixedLen;
+      p += field->structFieldLength;
       break;
     }
     case CrowType::TINT8:
@@ -148,9 +171,80 @@ void renderValue(std::string &s, uint8_t* &p, crow::Field &field)
   }
 
 }
+
+
+static void renderFieldValue(crow::SPCFieldInfo field, crow::DecColValue &col, std::string &s)
+{
+  static char tmp[48];
+  if (field->typeId == CrowType::TSTRING && needs_quotes(col.as_s())) {
+    s += quoted(col.as_s());
+  } else if (field->typeId == CrowType::TBYTES) {
+    std::string hex;
+    BytesToHexString(col.as_s(), hex);
+    s += hex;
+  } else {
+    s += col.as_s();
+  }
+  if (col.flags > 0) {
+    sprintf(tmp," FLAGS:%x", col.flags);
+    s += tmp;
+  }
+}
+
+void row_to_csv(crow::GenDecRow &row, std::string &s)
+{
+  auto indexMap = index_sorted_map(row);
+  
+  for ( int i=0; i < indexMap.size() ; i++) {
+    auto field = indexMap[i];
+    if (!field) { continue; }
+    crow::DecColValue &col = row[field];
+    if (s.size() > 0) s += ",";
+    renderFieldValue(field, col, s);
+  }
+}
+
+std::string to_csv(std::vector<crow::GenDecRow> &rows, crow::GenDecRow *decoratorFields)
+{
+  std::string s;
+  for (auto &row : rows) {
+    
+    std::string line = "";
+    row_to_csv(row, line);
+/*
+    auto indexMap = index_sorted_map(row);
+
+    for ( int i=0; i < indexMap.size() ; i++) {
+      auto field = indexMap[i];
+      if (!field) { continue; }
+      crow::DecColValue &col = row[field];
+      if (field->index > 0) s += ",";
+
+      renderFieldValue(field, col, s);
+    }
+ */
+    if (decoratorFields != nullptr) {
+      row_to_csv(*decoratorFields, line);
+      /*
+      auto indexMap = index_sorted_map(*decoratorFields);
+      for ( int i=0; i < indexMap.size() ; i++) {
+        auto field = indexMap[i];
+        if (!field) { continue; }
+        s += ",";
+        renderFieldValue(field, (*decoratorFields)[field], s);
+      }
+       */
+    }
+    s += line;
+    s += "||";
+  }
+  return s;
+}
+
+
 std::string to_csv(std::vector<crow::GenDecRow> &rows,
     std::vector< std::vector<uint8_t> > &rowStructs,
-                   std::vector<crow::Field> fields)
+                   std::vector<crow::SPCFieldInfo> fields)
 {
   static char tmp[48];
   std::string s;
@@ -158,18 +252,20 @@ std::string to_csv(std::vector<crow::GenDecRow> &rows,
   auto row = rows.begin();
   while(true) {
     int numProcessed = 0;
+    std::string line = "";
+
     if (structRow != rowStructs.end()) {
       numProcessed++;
       auto p = structRow->data();
       auto end = p + structRow->size();
       int i=-1;
       for (auto &field : fields) {
-        if (!field.isRaw) break;
+        if (!field->isStructField()) break;
         if (p >= end) break;
         i++;
-        if (i > 0) s += ",";
+        if (i > 0) line += ",";
 
-        renderValue(s, p, field);
+        renderStructValue(line, p, field);
       }
       structRow++;
     }
@@ -178,28 +274,13 @@ std::string to_csv(std::vector<crow::GenDecRow> &rows,
 
     if (row != rows.end()) {
       numProcessed++;
-      for (auto it = row->begin(); it != row->end(); it++) {
-        auto &col = it->second;
-        if (col.fieldIndex > 0) s += ",";
-        if (col.typeId == CrowType::TSTRING && needs_quotes(col.strval)) {
-          s += quoted(col.strval);
-        } else if (col.typeId == CrowType::TBYTES) {
-          std::string hex;
-          BytesToHexString(col.strval, hex);
-          s += hex;
-        } else {
-          s += col.strval;
-        }
-        if (col.flags > 0) {
-          sprintf(tmp," FLAGS:%x", col.flags);
-          s += tmp;
-        }
-        //sprintf(tmp, " (type:%d)", col.typeId);
-        //s += tmp;
-      }
+
+      row_to_csv(*row, line);
 
       row++;
     }
+
+    s += line;
 
     if (numProcessed == 0) { break; }
     s += "||";
@@ -207,34 +288,6 @@ std::string to_csv(std::vector<crow::GenDecRow> &rows,
   return s;
 }
 
-std::string to_csv(std::vector<crow::GenDecRow> &rows)
-{
-  static char tmp[48];
-  std::string s;
-  for (auto &row : rows) {
-    for (auto it = row.begin(); it != row.end(); it++) {
-      auto &col = it->second;
-      if (col.fieldIndex > 0) s += ",";
-      if (col.typeId == CrowType::TSTRING && needs_quotes(col.strval)) {
-        s += quoted(col.strval);
-      } else if (col.typeId == CrowType::TBYTES) {
-        std::string hex;
-        BytesToHexString(col.strval, hex);
-        s += hex;
-      } else {
-        s += col.strval;
-      }
-      if (col.flags > 0) {
-        sprintf(tmp," FLAGS:%x", col.flags);
-        s += tmp;
-      }
-      //sprintf(tmp, " (type:%d)", col.typeId);
-      //s += tmp;
-    }
-    s += "||";
-  }
-  return s;
-}
 
 TEST_F(DecTest, decodesUsingFieldNames) {
   auto vec = std::vector<uint8_t>();
@@ -261,7 +314,7 @@ TEST_F(DecTest, decodesFloats) {
   dec.decode(dl);
   std::string actual = to_csv(dl._rows);
 
-  ASSERT_EQ("3000444888.325,123.456||3000444888.325,123.456||", actual);
+  ASSERT_EQ("3000444888.325000,123.456001||3000444888.325000,123.456001||", actual);
 
   delete pDec;
 }
@@ -364,8 +417,8 @@ TEST_F(DecTest, decorators) {
   auto pDec = crow::DecoderFactory::New(vec.data(), vec.size());
   auto &dec = *pDec;
   dec.decode(dl);
-  std::string actual = to_csv(dl._rows);
-  std::string headers = to_header_csv(pDec->getFields());
+  std::string actual = to_csv(dl._rows, &dl._decoratorFields);
+  std::string headers = to_header_csv(pDec->getFields(), &dl._decoratorFields);
 
   ASSERT_EQ("bob,23,1,20180502,23||jerry,58,0,20180502,23||linda,33,1,20180502,23||", actual);
   ASSERT_EQ("name,age,active,date,domain", headers);

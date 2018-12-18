@@ -1,0 +1,3 @@
+[submodule "dyno"]
+	path = dyno
+	url = git@github.com:packetzero/dyno.git

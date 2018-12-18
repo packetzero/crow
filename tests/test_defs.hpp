@@ -34,10 +34,10 @@ void BytesToHexString(const std::string &bytes, std::string &dest);
 void HexStringToVec(const std::string str, Bytes &dest);
 void BytesToHexString(const std::string &bytes, std::string &dest);
 
-std::string to_header_csv(std::vector<crow::Field> fields);
-std::string to_csv(std::vector<crow::GenDecRow> &rows);
+std::string to_header_csv(std::vector<crow::SPCFieldInfo> fields, crow::GenDecRow *decoratorFields = nullptr);
+std::string to_csv(std::vector<crow::GenDecRow> &rows, crow::GenDecRow *decoratorFields = nullptr);
 std::string to_csv(std::vector<crow::GenDecRow> &rows,
                    std::vector< std::vector<uint8_t> > &rowStructs,
-                   std::vector<crow::Field> fields);
+                   std::vector<crow::SPCFieldInfo> fields);
 
 #endif // _TEST_DEFS_HPP_
