@@ -27,7 +27,7 @@ namespace crow {
     ~EncoderImpl() { }
 
 int put(const SPFieldDef fieldDef, DynVal value) override {
-  if (!fieldDef || !value.valid()) {
+  if (!fieldDef) {
     assert(false);
     return -1;
   }
@@ -37,9 +37,12 @@ int put(const SPFieldDef fieldDef, DynVal value) override {
     field = _newFieldInfo(fieldDef);
   }
 
-  writeIndexTag(field);
-
-  _write(field, value);
+  if (value.valid()) {
+    writeIndexTag(field);
+    _write(field, value);
+  } else {
+    writeHeaderTag(field);
+  }
 
   return 0;
 }
@@ -72,13 +75,15 @@ virtual int put(const DynMap &obj) override {
     }
     */
 
-    void _flush(int fd = 0) {
+    void _flush(int fd, bool headersOnly=false) {
       // flush header
       if (_hdrStack.GetSize() > 0) {
         // copy data
         memcpy(_stack.Push(_hdrStack.GetSize()), _hdrStack.Bottom(), _hdrStack.GetSize());
         _hdrStack.Clear();
       }
+
+      if (headersOnly) { return; }
 
       // write struct data if defined
 
@@ -121,11 +126,11 @@ virtual int put(const DynMap &obj) override {
     }
 
     virtual void startRow() override {
-      _flush();
+      _flush(0);
     }
 
     virtual void startTable(int flags) override {
-      _flush();
+      _flush(0);
       uint8_t tagid = TTABLE | ((uint8_t)flags & 0x70);
       auto p = _hdrStack.Push(1);
       *p = tagid;
@@ -134,11 +139,11 @@ virtual int put(const DynMap &obj) override {
       _fieldMap.clear();
     }
 
-    virtual void flush() const override {
-      ((EncoderImpl*)this)->_flush();
+    virtual void flush(bool headersOnly=false) const override {
+      ((EncoderImpl*)this)->_flush(0, headersOnly);
     }
-    virtual void flush(int fd) override {
-      _flush(fd);
+    virtual void flushfd(int fd, bool headersOnly=false) override {
+      _flush(fd, headersOnly);
     }
     virtual void endRow(int fd) override {
       if (fd > 0) _flush(fd);
@@ -299,6 +304,45 @@ virtual int put(const DynMap &obj) override {
       ival = value;
       memcpy(stack.Push(sizeof(value)), bytes, sizeof(bytes));
     }
+
+    void writeHeaderTag(const SPFieldInfo field) {
+      if (field->isWritten) { return; }
+
+      Stack &stack = _hdrStack;
+      size_t namelen = field->name.length();
+
+      uint8_t tagbyte = CrowTag::THFIELD;
+      if (field->schemaId > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
+      if (namelen > 0) { tagbyte |= FIELDINFO_FLAG_HAS_NAME; }
+      if (field->isStructField()) { tagbyte |= FIELDINFO_FLAG_RAW; }
+
+      uint8_t* ptr = stack.Push(2);
+      *ptr++ = tagbyte;
+      *ptr++ = field->index;
+
+      // typeid
+      ptr = stack.Push(1);
+      ptr[0] = field->typeId;
+
+      // id and subid (if set)
+      writeVarInt(field->id, stack);
+      if (field->schemaId > 0) { writeVarInt(field->schemaId, stack); }
+
+      // name (if set)
+      if (namelen > 0) {
+        writeVarInt(namelen, stack);
+        ptr = stack.Push(namelen);
+        memcpy(ptr,field->name.c_str(),namelen);
+      }
+
+      if (field->isStructField()) {
+        writeVarInt(field->structFieldLength, stack);
+      }
+      // mark as written, so we dont write FIELDINFO more than once
+      field->isWritten = true;
+      //((Field*)pField)->_written = true;
+    }
+
     /*
      * one byte 0x80 | index
      */
@@ -311,43 +355,10 @@ virtual int put(const DynMap &obj) override {
         ptr[0] = field->index | UPPER_BIT;
 
       } else {
-        Stack &stack = _hdrStack;
-        size_t namelen = field->name.length();
-
-        uint8_t tagbyte = CrowTag::THFIELD;
-        if (field->schemaId > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
-        if (namelen > 0) { tagbyte |= FIELDINFO_FLAG_HAS_NAME; }
-        if (field->isStructField()) { tagbyte |= FIELDINFO_FLAG_RAW; }
-
-        uint8_t* ptr = stack.Push(2);
-        *ptr++ = tagbyte;
-        *ptr++ = field->index;
-
-        // typeid
-        ptr = stack.Push(1);
-        ptr[0] = field->typeId;
-
-        // id and subid (if set)
-        writeVarInt(field->id, stack);
-        if (field->schemaId > 0) { writeVarInt(field->schemaId, stack); }
-
-        // name (if set)
-        if (namelen > 0) {
-          writeVarInt(namelen, stack);
-          ptr = stack.Push(namelen);
-          memcpy(ptr,field->name.c_str(),namelen);
-        }
-
-        if (field->isStructField()) {
-          writeVarInt(field->structFieldLength, stack);
-        }
-        // mark as written, so we dont write FIELDINFO more than once
-        field->isWritten = true;
-        //((Field*)pField)->_written = true;
-
+        writeHeaderTag(field);
         if (!field->isStructField()) {
           // field index on data row
-          ptr = _dataStack.Push(1);
+          uint8_t* ptr = _dataStack.Push(1);
           ptr[0] = field->index | UPPER_BIT;
         }
       }

@@ -35,8 +35,8 @@ namespace crow {
     /*
      * Call at end of data to flush encoding buffers.
      */
-    virtual void flush() const = 0;
-    virtual void flush(int fd) = 0;
+    virtual void flush(bool headersOnly=false) const = 0;
+    virtual void flushfd(int fd, bool headersOnly=false) = 0;
 
     virtual const uint8_t* data() const = 0;
     virtual size_t size() const = 0;

@@ -215,6 +215,116 @@ TEST_F(EncTest, encodesSparse)
   delete pEnc;
 }
 
+// Invalid DynVal with no type set are like null values
+// The field headers should be written, but not the data.
+TEST_F(EncTest, nullValues) {
+  auto pEnc = crow::EncoderFactory::New();
+  auto &enc = *pEnc;
+
+  std::string s = "";
+
+  DynVal nullValue;
+
+  enc.put(fname, nullValue);     s += "43000100046e616d65";
+  enc.put(fage, nullValue);         s += "4301020003616765";
+  enc.put(factive, true);    s += "4302090006616374697665";
+
+  // row data
+  s += "05";
+//  s += "8003626f62";
+//  s += "812e";
+  s += "8201";
+
+  enc.startRow();                   s += "05";
+
+  enc.put(fname, "jerry");   s += "80056a65727279";
+  enc.put(fage, 58);         s += "8174";
+  enc.put(factive, false);   s += "8200";
+  enc.startRow();                   s += "05";
+
+  enc.put(fname, "linda");   s += "80056c696e6461";
+  enc.put(fage, 33);         s += "8142";
+  enc.put(factive, true);    s += "8201";
+
+  enc.flush();
+
+  const uint8_t* result = enc.data();
+
+  std::string actual;
+  BytesToHexString(result, enc.size(), actual);
+
+  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
+
+  ASSERT_EQ(s, actual);
+
+  delete pEnc;
+}
+
+TEST_F(EncTest, trackRowSizes) {
+  auto pEnc = crow::EncoderFactory::New();
+  auto &enc = *pEnc;
+  
+  std::string s = "";
+  
+  DynVal nullValue;
+  
+  enc.put(fname, "bob");     s += "43000100046e616d65";
+  enc.put(fage, nullValue);         s += "4301020003616765";
+  enc.put(factive, true);    s += "4302090006616374697665";
+  
+  // flush only headers
+
+  enc.flush(true);
+  EXPECT_EQ(s.size()/2, enc.size());
+  size_t headerSize = enc.size();
+  size_t lastSize = enc.size();
+
+  // row data
+  s += "05";
+  s += "8003626f62";
+  //  s += "812e";
+  s += "8201";
+
+  enc.flush();
+  size_t rowSize = enc.size() - headerSize;
+  EXPECT_EQ(8, rowSize);
+  lastSize = enc.size();
+
+
+  enc.startRow();                   s += "05";
+  
+  enc.put(fname, "jerry");   s += "80056a65727279";
+  enc.put(fage, 58);         s += "8174";
+  enc.put(factive, false);   s += "8200";
+
+  enc.flush();
+  rowSize = enc.size() - lastSize;
+  EXPECT_EQ(12, rowSize);
+  lastSize = enc.size();
+
+  enc.startRow();                   s += "05";
+  enc.put(fname, "linda");   s += "80056c696e6461";
+  enc.put(fage, 33);         s += "8142";
+  enc.put(factive, true);    s += "8201";
+  
+  enc.flush();
+  
+
+  rowSize = enc.size() - lastSize;
+  EXPECT_EQ(12, rowSize);
+
+  const uint8_t* result = enc.data();
+  
+  std::string actual;
+  BytesToHexString(result, enc.size(), actual);
+  
+  if (ENC_GTEST_LOG_ENABLED) printf(" %s\n", actual.c_str());
+  
+  ASSERT_EQ(s, actual);
+  
+  delete pEnc;
+}
+
 
 /*
 TEST_F(EncTest, encodesSet)
