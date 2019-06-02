@@ -11,6 +11,8 @@ set(CMAKE_SUPPRESS_REGENERATION "1") # avoid ALL_BUILD targets
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG=1")
 
+include_directories(./dyno/include)
+
 if($ENV{MAKE_TESTS})
   file(GLOB TESTSRCS "tests/*.c*")
 

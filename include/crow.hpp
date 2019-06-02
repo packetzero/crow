@@ -6,7 +6,7 @@
 #include <vector>
 #include <memory>
 
-#include "../dyno/include/dynobj.hpp"
+#include <dynobj.hpp>
 
 enum CrowTag {
     TUNKNOWN,
