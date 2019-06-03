@@ -22,7 +22,13 @@ namespace crow {
     virtual void onField(SPCFieldInfo, const std::string &value, uint8_t flags) {}
     virtual void onField(SPCFieldInfo, const std::vector<uint8_t> value, uint8_t flags) {}
     virtual void onRowStart() {}
-    virtual void onRowEnd() {}
+    /*
+     * Notifies when a row is finished.
+     *
+     * For applications doing differential comparisons with
+     * new vs persisted data, pEncodedRowStart,length are included.
+     */
+    virtual void onRowEnd(const uint8_t* pEncodedRowStart, size_t length) {}
     /**
      * @returns 0 by default.  If RV_SKIP_VARIABLE_FIELDS returned,
      * decoder will skip over variable length fields associated with row.

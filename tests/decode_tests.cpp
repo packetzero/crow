@@ -226,7 +226,6 @@ std::string to_csv(std::vector<crow::GenDecRow> &rows,
     std::vector< std::vector<uint8_t> > &rowStructs,
                    std::vector<crow::SPCFieldInfo> fields)
 {
-  static char tmp[48];
   std::string s;
   auto structRow = rowStructs.begin();
   auto row = rows.begin();

@@ -45,6 +45,7 @@ namespace crow {
 
     size_t remaining() { return (size_t)(end - ptr); }
     bool empty() { return (ptr >= end); }
+    size_t getOffset() { return (size_t)(ptr - start); }
 
     PData(const uint8_t* p, size_t len) : start(p), ptr(p), end(p + len), length(len) { }
 
@@ -61,7 +62,7 @@ namespace crow {
     DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _data(pEncData, encLength), _fields(), _err(0), _typemask(0L),
       _errOffset(0L), _setId(0L), _mapSets(),
       _byteCount(encLength), _flags(0), _numRows(0),
-      _structFields(), _structLen(0), _tableFlags(0)
+      _structFields(), _structLen(0), _rowStartPos(0), _tableFlags(0)
       //, _isDecoratorTable(false),
     //_decoratorFields(), _decoratorListener(), _decoratorValues()
     {
@@ -82,12 +83,13 @@ namespace crow {
       _setId = setId;
 
       _numRows = 0;
+      _rowStartPos = _data.getOffset();
       while(false == decodeRow(listener)) {
           _numRows++;
       }
 
       if (_numRows > 0) {
-        listener.onRowEnd();
+        listener.onRowEnd(_data.start + _rowStartPos, (size_t)(_data.getOffset() - _rowStartPos));
       }
 
       return _numRows;
@@ -120,10 +122,11 @@ namespace crow {
 
         } else if (tagid == TROW) {
           if (_numRows > 0) {
-            { listener.onRowEnd(); }
+            { listener.onRowEnd(_data.start + _rowStartPos, (size_t)(_data.getOffset() - _rowStartPos - 1)); }
           }
 
           _flags = (tagbyte >> 4) & 0x07;
+          _rowStartPos = data.getOffset();
           { listener.onRowStart(); }
           if (_structLen > 0) {
             auto structPtr = data.ptr;
@@ -452,6 +455,7 @@ namespace crow {
     uint32_t       _numRows;
     std::vector<SPFieldInfo> _structFields;
     size_t         _structLen;
+    size_t         _rowStartPos;
 
     // these are duplicates of _fields and _structFields, marked as const for sharing with listeners
     std::vector<SPCFieldInfo> _constFields;

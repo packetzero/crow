@@ -80,7 +80,7 @@ namespace crow {
       _tableFlags = flags;
     }
 
-    void onRowEnd() override {
+    void onRowEnd(const uint8_t* pEncodedRowStart, size_t length) override {
       _rownum++;
     }
 
