@@ -18,6 +18,8 @@
 
 #define DECORATOR_INDEX_OFFSET 100
 
+#define NOT_SKIP_MODE (0 == (_modeFlags & DECODER_MODE_SKIP))
+
 namespace crow {
 
   /*
@@ -62,7 +64,8 @@ namespace crow {
     DecoderImpl(const uint8_t* pEncData, size_t encLength) : Decoder(), _data(pEncData, encLength), _fields(), _err(0), _typemask(0L),
       _errOffset(0L), _setId(0L), _mapSets(),
       _byteCount(encLength), _flags(0), _numRows(0),
-      _structFields(), _structLen(0), _rowStartPos(0), _tableFlags(0)
+      _structFields(), _structLen(0), _rowStartPos(0), _modeFlags(0),
+      _tableFlags(0)
       //, _isDecoratorTable(false),
     //_decoratorFields(), _decoratorListener(), _decoratorValues()
     {
@@ -75,6 +78,7 @@ namespace crow {
         _mapSets.erase(it++);
       }
     }
+    void setModeFlags(int flags) override { _modeFlags = flags; }
 
     /*
      * decode
@@ -89,14 +93,18 @@ namespace crow {
       }
 
       if (_numRows > 0) {
-        listener.onRowEnd(_data.start + _rowStartPos, (size_t)(_data.getOffset() - _rowStartPos));
+        listener.onRowEnd(false, _data.start + _rowStartPos, (size_t)(_data.getOffset() - _rowStartPos));
       }
 
       return _numRows;
     }
 
     bool decodeRow(DecoderListener &listener) override {
-      return _doDecodeRow(listener, _data);
+      if (_modeFlags & DECODER_MODE_SKIP) {
+        return _doSkipRow(listener, _data);
+      } else {
+        return _doDecodeRow(listener, _data);
+      }
     }
 
     bool _doDecodeRow(DecoderListener &listener, PData &data) {
@@ -121,9 +129,7 @@ namespace crow {
           }
 
         } else if (tagid == TROW) {
-          if (_numRows > 0) {
-            { listener.onRowEnd(_data.start + _rowStartPos, (size_t)(_data.getOffset() - _rowStartPos - 1)); }
-          }
+          listener.onRowEnd((_numRows == 0), _data.start + _rowStartPos, (size_t)(_data.getOffset() - _rowStartPos - 1));
 
           _flags = (tagbyte >> 4) & 0x07;
           _rowStartPos = data.getOffset();
@@ -203,6 +209,98 @@ namespace crow {
             _decoratorFields[_decoratorFields.size()-1]->index += DECORATOR_INDEX_OFFSET;
           }
 */
+        } else {
+          _markError(EINVAL, data); return true;
+        }
+
+      }
+      return false;
+    }
+
+    /**
+     * Will decode fields, only to skip over it.
+     * Will call listener.onRowStart() and listener.onRowEnd() only.
+     */
+    bool _doSkipRow(DecoderListener &listener, PData &data) {
+      while (true) {
+
+        uint8_t tagbyte;
+        if (data.empty()) { _markError(ENOSPC, data); return true; }
+        tagbyte = *data.ptr++;
+        bool isIndex = (tagbyte & (uint8_t)0x80) != 0;
+        uint8_t tagid = tagbyte & 0x0F;
+
+        if (isIndex) {
+
+          uint8_t index = tagbyte & (uint8_t)0x7F;
+          if (index >= _fields.size()) {
+            _markError(EINVAL, data); return true;
+          }
+          SPFieldInfo pField = _fields[index];
+
+          if (_decodeValue(pField, data, listener)) {
+            break;
+          }
+
+        } else if (tagid == TROW) {
+          listener.onRowEnd((_numRows == 0),_data.start + _rowStartPos, (size_t)(_data.getOffset() - _rowStartPos - 1));
+
+          _flags = (tagbyte >> 4) & 0x07;
+          _rowStartPos = data.getOffset();
+          { listener.onRowStart(); }
+          if (_structLen > 0) {
+            //auto structPtr = data.ptr;
+            if (data.remaining() < _structLen) {
+              throw new std::runtime_error("no more data, trying to read struct");
+            }
+            data.ptr += _structLen;
+            // read struct
+            size_t varlen = 0;
+            if (_fields.size() > _structFields.size()) {
+              // read length of variable length section
+              varlen = readVarInt(data);
+              if (varlen > data.remaining()) {
+                throw new std::runtime_error("length of variable fields extends past end");
+              }
+            }
+
+            //int rv = listener.onStruct(structPtr, _structLen, _constStructFields);
+            if (true) {//rv == RV_SKIP_VARIABLE_FIELDS) {
+              data.ptr += varlen;
+            }
+          }
+
+          break;
+
+        } else if (tagid == TFLAGS) {
+
+          _flags = (tagbyte >> 4) & 0x07;
+
+        } else if (tagid == TBLOCK) {
+
+          // TODO
+
+        } else if (tagid == TTABLE) {
+
+
+          // TODO: snapshot decorators
+          // clear previous table state.
+          _structFields.clear();
+          _fields.clear();
+          _constFields.clear();
+          _constStructFields.clear();
+          _numRows = 0;
+          _tableFlags = tagbyte & 0xF0;
+
+          listener.onTableStart(tagbyte & 0xF0);
+
+        } else if (tagid == THFIELD) {
+
+          SPCFieldInfo pField = _decodeFieldInfo(data, tagbyte);
+          if (pField == 0L) {
+            _markError(ENOSPC, data); return true;
+          }
+
         } else {
           _markError(EINVAL, data); return true;
         }
@@ -316,53 +414,53 @@ namespace crow {
         case TINT32: {
           uint64_t tmp = readVarInt(data);
           int32_t val = ZigZagDecode32((uint32_t)tmp);
-          listener.onField(pField, val, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, val, _flags); }
         }
         break;
 
         case TUINT32: {
           uint64_t tmp = readVarInt(data);
           uint32_t val = (uint32_t)tmp;
-          listener.onField(pField, val, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, val, _flags); }
         }
         break;
 
         case TINT64: {
           uint64_t tmp = readVarInt(data);
           int64_t val = ZigZagDecode64(tmp);
-          listener.onField(pField, val, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, val, _flags); }
         }
         break;
 
         case TUINT64: {
           uint64_t val = readVarInt(data);
-          listener.onField(pField, val, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, val, _flags); }
         }
         break;
 
         case TFLOAT64: {
           uint64_t tmp = readFixed64(data);
           double val = DecodeDouble(tmp);
-          listener.onField(pField, val, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, val, _flags); }
         }
         break;
 
         case TFLOAT32: {
           uint64_t tmp = readFixed32(data);
           double val = DecodeFloat(tmp);
-          listener.onField(pField, val, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, val, _flags); }
         }
         break;
 
         case TUINT8: {
           uint8_t val = *data.ptr++;
-          listener.onField(pField, val, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, val, _flags); }
         }
         break;
 
         case TINT8: {
           uint8_t val = *data.ptr++;
-          listener.onField(pField, (int8_t)val, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, (int8_t)val, _flags); }
         }
         break;
 
@@ -374,7 +472,7 @@ namespace crow {
           }
           std::string s(reinterpret_cast<char const*>(data.ptr), (size_t)len);
           data.ptr += len;
-          listener.onField(pField, s, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, s, _flags); }
         }
         break;
 
@@ -388,7 +486,7 @@ namespace crow {
           vec.resize(len);
           memcpy(vec.data(), data.ptr, (size_t)len);
           data.ptr += len;
-          listener.onField(pField, vec, _flags);
+          if (NOT_SKIP_MODE) { listener.onField(pField, vec, _flags); }
         }
         break;
 
@@ -456,6 +554,7 @@ namespace crow {
     std::vector<SPFieldInfo> _structFields;
     size_t         _structLen;
     size_t         _rowStartPos;
+    int            _modeFlags;
 
     // these are duplicates of _fields and _structFields, marked as const for sharing with listeners
     std::vector<SPCFieldInfo> _constFields;

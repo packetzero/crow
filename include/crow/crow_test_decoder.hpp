@@ -80,8 +80,10 @@ namespace crow {
       _tableFlags = flags;
     }
 
-    void onRowEnd(const uint8_t* pEncodedRowStart, size_t length) override {
-      _rownum++;
+    void onRowEnd(bool isHeaderRow, const uint8_t* pEncodedRowStart, size_t length) override {
+      if (!isHeaderRow) {
+        _rownum++;
+      }
     }
 
     std::vector< GenDecRow > _rows;

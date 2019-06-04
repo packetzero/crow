@@ -28,7 +28,7 @@ namespace crow {
      * For applications doing differential comparisons with
      * new vs persisted data, pEncodedRowStart,length are included.
      */
-    virtual void onRowEnd(const uint8_t* pEncodedRowStart, size_t length) {}
+    virtual void onRowEnd(bool isHeaderRow, const uint8_t* pEncodedRowStart, size_t length) {}
     /**
      * @returns 0 by default.  If RV_SKIP_VARIABLE_FIELDS returned,
      * decoder will skip over variable length fields associated with row.
@@ -36,6 +36,8 @@ namespace crow {
     virtual int onStruct(const uint8_t *data, size_t datalen, const std::vector<SPCFieldInfo> &structFields) { return 0;}
     virtual void onTableStart(uint8_t flags) {}
   };
+
+#define DECODER_MODE_SKIP (1 << 1)
 
   class Decoder {
   public:
@@ -75,6 +77,8 @@ namespace crow {
     virtual size_t getExpandedSize() = 0;
 
     virtual std::vector<SPCFieldInfo> getFields() = 0;
+
+    virtual void setModeFlags(int flags) = 0;
   };
 
 } // namespace crow
