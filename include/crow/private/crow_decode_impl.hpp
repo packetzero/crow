@@ -470,9 +470,11 @@ namespace crow {
             _markError(ENOSPC, data);
             break;
           }
-          std::string s(reinterpret_cast<char const*>(data.ptr), (size_t)len);
+          if (NOT_SKIP_MODE) {
+            std::string s(reinterpret_cast<char const*>(data.ptr), (size_t)len);
+            listener.onField(pField, s, _flags);
+          }
           data.ptr += len;
-          if (NOT_SKIP_MODE) { listener.onField(pField, s, _flags); }
         }
         break;
 
