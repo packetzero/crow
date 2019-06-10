@@ -312,7 +312,7 @@ virtual int put(const DynMap &obj) override {
       size_t namelen = field->name.length();
 
       uint8_t tagbyte = CrowTag::THFIELD;
-      if (field->schemaId > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
+      if (field->schema && field->schema->id > 0) { tagbyte |= FIELDINFO_FLAG_HAS_SUBID; }
       if (namelen > 0) { tagbyte |= FIELDINFO_FLAG_HAS_NAME; }
       if (field->isStructField()) { tagbyte |= FIELDINFO_FLAG_RAW; }
 
@@ -326,7 +326,7 @@ virtual int put(const DynMap &obj) override {
 
       // id and subid (if set)
       writeVarInt(field->id, stack);
-      if (field->schemaId > 0) { writeVarInt(field->schemaId, stack); }
+      if (field->schema && field->schema->id > 0) { writeVarInt(field->schema->id, stack); }
 
       // name (if set)
       if (namelen > 0) {

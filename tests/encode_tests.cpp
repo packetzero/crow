@@ -367,7 +367,8 @@ TEST_F(EncTest, encodesSubids)
 
   // overrides the global scoped A, B
   const SPFieldDef A = FieldDef::alloc(TUINT32, 1);
-  const SPFieldDef B = FieldDef::alloc(TUINT32, 1, 44000);
+  auto schema = std::make_shared<SchemaId>("",44000);
+  const SPFieldDef B = FieldDef::alloc(TUINT32, 1, schema);
 
   std::string s = "";
 

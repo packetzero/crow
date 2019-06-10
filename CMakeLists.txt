@@ -15,8 +15,9 @@ include_directories(./dyno/include)
 
 if($ENV{MAKE_TESTS})
   file(GLOB TESTSRCS "tests/*.c*")
+  file(GLOB HDRS "include/*.h*" "include/crow/*.h*" "include/crow/private/*.h*")
 
-  ADD_EXECUTABLE(crowtests ${TESTSRCS})
+  ADD_EXECUTABLE(crowtests ${TESTSRCS} ${HDRS})
   TARGET_LINK_LIBRARIES(crowtests gtest)
   TARGET_LINK_LIBRARIES(crowtests pthread)
 else()

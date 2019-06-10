@@ -369,7 +369,11 @@ namespace crow {
 
       // TODO: check err
 
-      const SPFieldDef fieldDef = FieldDef::alloc((DynType)typeId, name, id, subid);
+      SPSchemaId schema;
+      if (has_subid) {
+        schema = std::make_shared<SchemaId>("", subid);
+      }
+      const SPFieldDef fieldDef = FieldDef::alloc((DynType)typeId, name, id, schema);
       SPFieldInfo field = std::make_shared<FieldInfo>(fieldDef, index, fixedLen);
       _fields.push_back(field);
       _constFields.push_back(field);

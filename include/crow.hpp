@@ -64,7 +64,7 @@ namespace crow {
     bool isStructField() const { return structFieldLength > 0; }
 
     FieldInfo(const SPFieldDef def, uint8_t idx, uint32_t fixedLen) :
-      FieldDef(def->typeId, def->name, def->id, def->schemaId),
+      FieldDef(def->typeId, def->name, def->id, def->schema),
       structFieldLength(fixedLen), index(idx), isWritten(false) {
     }
   };

@@ -73,8 +73,8 @@ std::string to_header_csv(std::vector<crow::SPCFieldInfo> fields, crow::GenDecRo
     if (fld->id > 0) {
       sprintf(tmp,"%d", fld->id);
       s += tmp;
-      if (fld->schemaId > 0) {
-        sprintf(tmp,"_%d", fld->schemaId);
+      if (fld->schema && fld->schema->id > 0) {
+        sprintf(tmp,"_%d", fld->schema->id);
         s += tmp;
       }
     }
