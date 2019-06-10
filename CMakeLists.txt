@@ -27,4 +27,4 @@ else()
 endif()
 
 #install(TARGETS ${PROJECT_NAME} ARCHIVE DESTINATION lib)
-install(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.hpp")
+install(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h*")
